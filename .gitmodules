@@ -1,0 +1,3 @@
+[submodule "SAGE"]
+	path = SAGE
+	url = http://github.com/henry-nazare/llvm-sage

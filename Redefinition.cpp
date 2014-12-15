@@ -58,7 +58,7 @@ PHINode *Redefinition::getRedef(Value *V, BasicBlock *BB) {
   if (BBIt == Redef_.end())
     return nullptr;
   auto Map = BBIt->second.find(V);
-  return Map == BBIt->second.end() ? Map->second : nullptr;
+  return Map != BBIt->second.end() ? Map->second : nullptr;
 }
 
 // Create sigma nodes for all branches in the function.

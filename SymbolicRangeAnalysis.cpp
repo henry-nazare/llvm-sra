@@ -5,6 +5,7 @@
 
 #include "SymbolicRangeAnalysis.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 

@@ -26,20 +26,18 @@ static bool IsRedefinable(Value *V) {
 
 static PHINode *CreateNamedPhi(Value *V, Twine Prefix,
                                BasicBlock::iterator Position) {
-  Twine Name = Prefix;
-  if (V->hasName())
-    Name = Prefix + "." + V->getName();
+  Twine Name(V->hasName() ? Prefix + "." + V->getName() : Prefix);
   return PHINode::Create(V->getType(), 1, Name, Position);
 }
 
 void Redefinition::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<DominatorTree>();
+  AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<DominanceFrontier>();
   AU.setPreservesCFG();
 }
 
 bool Redefinition::runOnFunction(Function &F) {
-  DT_  = &getAnalysis<DominatorTree>();
+  DT_  = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   DF_  = &getAnalysis<DominanceFrontier>();
 
   createSigmasInFunction(&F);
@@ -117,8 +115,11 @@ void Redefinition::createSigmaNodesForValueAt(Value *V, Value *C,
                                               BasicBlock *BB) {
   assert(BB->getSinglePredecessor() && "Block has multiple predecessors");
 
-  DEBUG(dbgs() << "createSigmaNodesForValueAt: " << *V << " and "
-                     << *C << " at " << BB->getName() << "\n");
+  DEBUG(
+    dbgs() << "createSigmaNodesForValueAt: " << *V;
+    if (C) dbgs() << " and " << *C;
+    dbgs() << " at " << BB->getName() << "\n";
+  );
 
   auto Position = BB->getFirstInsertionPt();
   if (IsRedefinable(V) && dominatesUse(V, BB))
@@ -198,7 +199,7 @@ PHINode *Redefinition::createPhiNodeAt(Value *V, BasicBlock *BB) {
 
 // Returns true if BB dominates a use of V.
 bool Redefinition::dominatesUse(Value *V, BasicBlock *BB) {
-  for (auto UI = V->use_begin(), UE = V->use_end(); UI != UE; ++UI)
+  for (auto UI = V->user_begin(), UE = V->user_end(); UI != UE; ++UI)
     // Disregard phi nodes, since they can dominate their operands.
     if (isa<PHINode>(*UI) || V == *UI)
       continue;
@@ -213,7 +214,7 @@ void Redefinition::replaceUsesOfWithAfter(Value *V, Value *R, BasicBlock *BB) {
                << *R << " after " << BB->getName() << "\n");
 
   std::set<Instruction*> Replace;
-  for (auto UI = V->use_begin(), UE = V->use_end(); UI != UE; ++UI)
+  for (auto UI = V->user_begin(), UE = V->user_end(); UI != UE; ++UI)
     if (Instruction *I = dyn_cast<Instruction>(*UI)) {
       // If the instruction's parent dominates BB, mark the instruction to
       // be replaced.

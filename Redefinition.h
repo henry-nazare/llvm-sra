@@ -2,8 +2,8 @@
 #define _REDEFINITION_H_
 
 #include "llvm/Pass.h"
-#include "llvm/Analysis/Dominators.h"
 #include "llvm/Analysis/DominanceFrontier.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Instructions.h"
 
 #include <map>

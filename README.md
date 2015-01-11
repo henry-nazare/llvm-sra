@@ -1,6 +1,6 @@
 # Symbolic range analysis for LLVM
 
-## Install instructions
+## Installing
 
 Update the submodules recursively and call make, as seen below.
 

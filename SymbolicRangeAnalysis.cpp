@@ -31,14 +31,14 @@ static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
 
   switch (BO->getOpcode()) {
     case Instruction::Add:
-     return LHS + RHS;
+      return LHS + RHS;
     case Instruction::Sub:
-     return LHS - RHS;
+      return LHS - RHS;
     case Instruction::Mul:
-     return LHS * RHS;
+      return LHS * RHS;
     case Instruction::SDiv:
     case Instruction::UDiv:
-     return LHS/RHS;
+      return LHS/RHS;
     default:
       return SAGERange(SAGEExpr::getMinusInf(SRA->getSI()),
                        SAGEExpr::getPlusInf(SRA->getSI()));
@@ -104,6 +104,7 @@ void SymbolicRangeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool SymbolicRangeAnalysis::runOnModule(Module& M) {
+  Module_ = &M;
   SI_ = &getAnalysis<SAGEInterface>();
 
   for (auto &F : M) {
@@ -142,18 +143,18 @@ SAGERange SymbolicRangeAnalysis::getBottom() const {
 std::string SymbolicRangeAnalysis::makeName(Function *F, Value *V) {
   static unsigned Temp = 1;
   if (V->hasName()) {
-    auto Name = V->getName().str();
+    auto Name = (F->getName() + Twine("_") + V->getName()).str();
     std::replace(Name.begin(), Name.end(), '.', '_');
     return Name;
   } else {
-    auto Name = Twine("{") + F->getName() + Twine(".") +
-                Twine(Temp++) + Twine("}");
+    auto Name = F->getName() + Twine("_") + Twine(Temp++);
     return Name.str();
   }
 }
 
 void SymbolicRangeAnalysis::setName(Value *V, std::string Name) {
   Name_[V] = Name;
+  Value_[Name] = V;
 }
 
 std::string SymbolicRangeAnalysis::getName(Value *V) const {
@@ -199,6 +200,15 @@ SAGERange SymbolicRangeAnalysis::getStateOrInf(Value *V) const {
   static SAGERange Inf(SAGEExpr::getMinusInf(*SI_), SAGEExpr::getPlusInf(*SI_));
   auto State = getState(V);
   return State != getBottom() ? State : Inf;
+}
+
+std::pair<Value*, Value*>
+    SymbolicRangeAnalysis::getRangeValuesFor(Value *V, IRBuilder<> IRB) const {
+  SAGERange Range = getStateOrInf(V);
+  IntegerType *Ty = cast<IntegerType>(V->getType());
+  Value *Lower = Range.getLower().toValue(Ty, IRB, Value_, Module_),
+        *Upper = Range.getUpper().toValue(Ty, IRB, Value_, Module_);
+  return std::make_pair(Lower, Upper);
 }
 
 void SymbolicRangeAnalysis::createNarrowingFn(Value *LHS, Value *RHS,
@@ -266,7 +276,7 @@ void SymbolicRangeAnalysis::initialize(Function *F) {
     if (AI->getType()->isIntegerTy()) {
       std::string Name = makeName(F, &(*AI));
       setName(&(*AI), Name);
-      SAGEExpr Arg(*SI_, ("_" + Name).c_str());
+      SAGEExpr Arg(*SI_, Name.c_str());
       // Range is symbolic - [Arg, Arg].
       setState(&(*AI), SAGERange(Arg));
     }

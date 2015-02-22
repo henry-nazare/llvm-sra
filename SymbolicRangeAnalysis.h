@@ -38,6 +38,8 @@ public:
   SAGERange getState(Value *V)      const;
   SAGERange getStateOrInf(Value *V) const;
 
+  std::pair<Value*, Value*> getRangeValuesFor(Value *V, IRBuilder<> IRB) const;
+
   void initialize(Function *F);
   void reset(Function *F);
   void iterate(Function *F);
@@ -54,10 +56,12 @@ public:
   SAGEInterface &getSI() { return *SI_; }
 
 private:
+  Module *Module_;
   SAGEInterface *SI_;
   Redefinition  *RDF_;
 
   std::map<Value*, std::string> Name_;
+  std::map<std::string, Value*> Value_;
   std::map<Value*, SAGERange>   State_;
   std::map<Value*, unsigned>    Changed_;
 

@@ -13,7 +13,7 @@ all: $(LLS) $(TESTLLS) $(TESTOUT)
 
 %.out %.out.ll: %.ll
 	../SAGE/bin/sage-opt -load Python.so -load SAGE.so -load SRA.so -mem2reg \
-	                     -sra-annotator -S -o $*.out.ll $< 2>$*.out
+	                     -sra-annotator -sra-gen-test -S -o $*.out.ll $< 2>$*.out
 
 .PHONY: clean
 

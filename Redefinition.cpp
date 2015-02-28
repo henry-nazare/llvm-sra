@@ -215,22 +215,21 @@ void Redefinition::replaceUsesOfWithAfter(Value *V, Value *R, BasicBlock *BB) {
 
   std::set<Instruction*> Replace;
   for (auto UI = V->user_begin(), UE = V->user_end(); UI != UE; ++UI)
-    if (Instruction *I = dyn_cast<Instruction>(*UI)) {
+    if (Instruction *I = dyn_cast<Instruction>(*UI))
+      Replace.insert(I);
+
+  for (auto& I : Replace) {
       // If the instruction's parent dominates BB, mark the instruction to
       // be replaced.
       if (I != R && DT_->dominates(BB, I->getParent()))
-        Replace.insert(I);
+        I->replaceUsesOfWith(V, R);
       // If the parent does not dominate BB, check if the use is a phi and
-      // replace the incoming value.
-      else if (PHINode *Phi = dyn_cast<PHINode>(*UI))
+      // replace the incoming value later on.
+      else if (PHINode *Phi = dyn_cast<PHINode>(I))
         for (unsigned Idx = 0; Idx < Phi->getNumIncomingValues(); ++Idx)
           if (Phi->getIncomingValue(Idx) == V &&
               DT_->dominates(BB, Phi->getIncomingBlock(Idx)))
             Phi->setIncomingValue(Idx, R);
-    }
-
-  // Replace V with R on all marked instructions.
-  for (auto& I : Replace)
-    I->replaceUsesOfWith(V, R);
+  }
 }
 

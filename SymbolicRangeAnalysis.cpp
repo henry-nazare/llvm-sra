@@ -225,9 +225,13 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
                      SwapPred = ICI->getSwappedPredicate(),
                      InvPred  = ICI->getInversePredicate(), EqPred;
 
+  // For (i < j) branching to cond.true and cond.false, for example:
+  // 1) i < j at cond.true;
   createNarrowingFn(LHS, RHS, Pred,     TB);
+  // 2) j > i at cond.true;
   createNarrowingFn(RHS, LHS, SwapPred, TB);
-  createNarrowingFn(RHS, LHS, InvPred,  FB);
+  // 3) i >= j at cond.false;
+  createNarrowingFn(LHS, RHS, InvPred,  FB);
 
   if (ICI->isEquality())
     EqPred = Pred;
@@ -235,7 +239,8 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
     EqPred = (ICmpInst::Predicate)(Pred - 1);
   else if (ICI->isFalseWhenEqual())
     EqPred = (ICmpInst::Predicate)(Pred + 1);
-  createNarrowingFn(LHS, RHS, EqPred, FB);
+  // 4) j <= i at cond.false;
+  createNarrowingFn(RHS, LHS, EqPred, FB);
 }
 
 void SymbolicRangeAnalysis::handleIntInst(Instruction *I) {

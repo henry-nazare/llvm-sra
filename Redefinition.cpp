@@ -3,7 +3,12 @@
 
 #define DEBUG_TYPE "redef"
 
+// Python.h should always be the first included file.
+#include "SAGE/Python/PythonInterface.h"
+
 #include "Redefinition.h"
+
+#include "SAGE/SAGEInterface.h"
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/CommandLine.h"
@@ -33,6 +38,8 @@ static PHINode *CreateNamedPhi(Value *V, Twine Prefix,
 void Redefinition::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<DominanceFrontier>();
+  AU.addPreserved<SAGEInterface>();
+  AU.addPreserved<PythonInterface>();
   AU.setPreservesCFG();
 }
 

@@ -103,27 +103,22 @@ void SymbolicRangeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
 
-bool SymbolicRangeAnalysis::runOnModule(Module& M) {
-  Module_ = &M;
+bool SymbolicRangeAnalysis::runOnFunction(Function& F) {
+  Module_ = F.getParent();
   SI_ = &getAnalysis<SAGEInterface>();
 
-  for (auto &F : M) {
-    if (F.isIntrinsic() || F.isDeclaration())
-      continue;
+  dbgs() << "SRA: runOnModule: " << F.getName() << "\n";
 
-    dbgs() << "SRA: runOnModule: " << F.getName() << "\n";
+  RDF_ = &getAnalysis<Redefinition>();
 
-    RDF_ = &getAnalysis<Redefinition>(F);
-
-    initialize(&F);
-    reset(&F);
-    iterate(&F);
-    reset(&F);
-    iterate(&F);
-    reset(&F);
-    iterate(&F);
-    widen(&F);
-  }
+  initialize(&F);
+  reset(&F);
+  iterate(&F);
+  reset(&F);
+  iterate(&F);
+  reset(&F);
+  iterate(&F);
+  widen(&F);
 
   DEBUG(dbgs() << *this << "\n");
 

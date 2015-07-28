@@ -20,8 +20,35 @@ static RegisterPass<SymbolicRangeAnalysis>
   X("sra", "Symbolic range analysis with SAGE and QEPCAD");
 char SymbolicRangeAnalysis::ID = 0;
 
+static cl::opt<bool>
+    ShouldUseSymBounds("sra-use-sym-bounds", cl::init(false), cl::Hidden,
+        cl::desc("Use symbolic mins & maxes for integer bounds"));
+
 const unsigned CHANGED_LOWER = 1 << 0;
 const unsigned CHANGED_UPPER = 1 << 1;
+
+static SAGERange GetBoundsForTy(Type *Ty, SAGEInterface *SI) {
+  unsigned Width = Ty->getIntegerBitWidth();
+  if (ShouldUseSymBounds) {
+    switch (Width) {
+      case 8:
+        return SAGERange(SAGEExpr(*SI, "UCHAR_MAX"), SAGEExpr(*SI, "CHAR_MIN"));
+      case 16:
+        return SAGERange(SAGEExpr(*SI, "USHRT_MAX"), SAGEExpr(*SI, "SHRT_MIN"));
+      case 32:
+        return SAGERange(SAGEExpr(*SI, "UINT_MAX"), SAGEExpr(*SI, "INT_MIN"));
+      case 64:
+        return SAGERange(SAGEExpr(*SI, "ULONG_MAX"), SAGEExpr(*SI, "LONG_MIN"));
+    }
+  }
+  uint64_t Upper = APInt::getMaxValue(Width).getZExtValue();
+  int64_t Lower = APInt::getSignedMinValue(Width).getSExtValue();
+  return SAGERange(SAGEExpr(*SI, Upper), SAGEExpr(*SI, Lower));
+}
+
+static SAGERange GetBoundsForValue(Value *V, SAGEInterface *SI) {
+  return GetBoundsForTy(V->getType(), SI);
+}
 
 static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
   DEBUG(dbgs() << "SRA: BinaryOp: " << *BO << "\n");
@@ -40,8 +67,7 @@ static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
     case Instruction::UDiv:
       return LHS/RHS;
     default:
-      return SAGERange(SAGEExpr::getMinusInf(SRA->getSI()),
-                       SAGEExpr::getPlusInf(SRA->getSI()));
+      return GetBoundsForValue(BO, &SRA->getSI());
   }
 }
 
@@ -160,10 +186,6 @@ std::string SymbolicRangeAnalysis::getName(Value *V) const {
 
 void SymbolicRangeAnalysis::setState(Value *V, SAGERange Range) {
   DEBUG(dbgs() << "SRA: setState(" << *V << "," << Range << ")\n");
-  if (Range.getLower().isEQ(SAGEExpr::getNaN(*SI_)))
-    Range.setLower(SAGEExpr::getMinusInf(*SI_));
-  if (Range.getUpper().isEQ(SAGEExpr::getNaN(*SI_)))
-    Range.setUpper(SAGEExpr::getPlusInf(*SI_));
   auto It = State_.insert(std::make_pair(V, Range));
   if (!It.second) {
     if (It.first->second != Range)
@@ -185,16 +207,16 @@ SAGERange SymbolicRangeAnalysis::getState(Value *V) const {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
     return SAGEExpr(*SI_, CI->getValue().getSExtValue());
   if (isa<UndefValue>(V) || isa<Constant>(V))
-    return SAGERange(SAGEExpr::getMinusInf(*SI_), SAGEExpr::getPlusInf(*SI_));
+    return GetBoundsForValue(V, SI_);
   auto It = State_.find(V);
   assert(It != State_.end() && "Requested value is not in map");
   return It->second;
 }
 
 SAGERange SymbolicRangeAnalysis::getStateOrInf(Value *V) const {
-  static SAGERange Inf(SAGEExpr::getMinusInf(*SI_), SAGEExpr::getPlusInf(*SI_));
   auto State = getState(V);
-  return State != getBottom() ? State : Inf;
+  return State != getBottom()
+      ? State : GetBoundsForTy(cast<IntegerType>(V->getType()), SI_);
 }
 
 std::pair<Value*, Value*>
@@ -239,10 +261,9 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
 }
 
 void SymbolicRangeAnalysis::handleIntInst(Instruction *I) {
-  static SAGERange Inf(SAGEExpr::getMinusInf(*SI_), SAGEExpr::getPlusInf(*SI_));
   setName(I,  makeName(I->getParent()->getParent(), I));
   if (isa<LoadInst>(I))
-    setState(I, Inf);
+    setState(I, GetBoundsForValue(I, SI_));
   else
     setState(I, getBottom());
   switch (I->getOpcode()) {
@@ -332,10 +353,11 @@ void SymbolicRangeAnalysis::widen(Function *F) {
       if (I.getType()->isIntegerTy())
         if (Changed_.count(&I) && Changed_[&I]) {
           auto State = getStateOrInf(&I);
+          auto Bounds = GetBoundsForValue(&I, SI_);
           if (Changed_[&I] & CHANGED_LOWER)
-            State.setLower(SAGEExpr::getMinusInf(*SI_));
+            State.setLower(Bounds.getLower());
           if (Changed_[&I] & CHANGED_UPPER)
-            State.setUpper(SAGEExpr::getPlusInf(*SI_));
+            State.setUpper(Bounds.getUpper());
           setState(&I, State);
         }
 }

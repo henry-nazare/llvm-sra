@@ -237,8 +237,10 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
     EqPred = Pred;
   else if (ICI->isTrueWhenEqual())
     EqPred = (ICmpInst::Predicate)(Pred - 1);
-  else if (ICI->isFalseWhenEqual())
+  else {
+    assert(ICI->isFalseWhenEqual());
     EqPred = (ICmpInst::Predicate)(Pred + 1);
+  }
   // 4) j <= i at cond.false;
   createNarrowingFn(RHS, LHS, EqPred, FB);
 }

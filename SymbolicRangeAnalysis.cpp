@@ -24,6 +24,11 @@ static cl::opt<bool>
     ShouldUseSymBounds("sra-use-sym-bounds", cl::init(false), cl::Hidden,
         cl::desc("Use symbolic mins & maxes for integer bounds"));
 
+static cl::opt<int>
+    MaxPhiEvalSize("sra-max-phi-eval-size", cl::init(-1), cl::Hidden,
+        cl::desc("Maximum number of operands on phi nodes, phi nodes which"
+            "have more will not be evaluated"));
+
 const unsigned CHANGED_LOWER = 1 << 0;
 const unsigned CHANGED_UPPER = 1 << 1;
 
@@ -107,6 +112,14 @@ static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
 
 static SAGERange Meet(PHINode *Phi, SymbolicRangeAnalysis *SRA) {
   DEBUG(dbgs() << "SRA: Meet: " << *Phi << "\n");
+
+  if (MaxPhiEvalSize > 0 && Phi->getNumOperands() > (unsigned) MaxPhiEvalSize) {
+    SAGERange Ret =
+        GetBoundsForTy(cast<IntegerType>(Phi->getType()), &SRA->getSI());
+    Ret.setLower(Ret.getLower());
+    Ret.setUpper(Ret.getUpper());
+    return Ret;
+  }
 
   SAGERange Ret = SRA->getState(Phi->getIncomingValue(0));
   auto OI = Phi->op_begin(), OE = Phi->op_end();

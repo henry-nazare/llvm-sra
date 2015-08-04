@@ -14,6 +14,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
+#include <list>
 #include <set>
 
 STATISTIC(NumCreatedSigmas, "Number of sigma-phis created");
@@ -153,9 +154,7 @@ void Redefinition::createSigmaNodeForValueAt(Value *V, BasicBlock *BB,
   BranchRedef->addIncoming(V, BB->getSinglePredecessor());
   NumCreatedSigmas++;
 
-  //Redef_[BB][V] = BranchRedef;
-  //dbgs() << "Redef of " << *V << " at " << BB->getName() << "\n";
-
+  std::list<PHINode*> FrontierRedefs;
   // Phi nodes should be created on all blocks in the dominance frontier of BB
   // where V is defined.
   auto DI = DF_->find(BB);
@@ -164,17 +163,25 @@ void Redefinition::createSigmaNodeForValueAt(Value *V, BasicBlock *BB,
       // If the block in the frontier dominates a use of V, then a phi node
       // should be created at said block.
       if (dominatesUse(V, BI))
-         if (PHINode *FrontierRedef = createPhiNodeAt(V, BI))
+         if (PHINode *FrontierRedef = createPhiNodeAt(V, BI)) {
+           FrontierRedefs.push_front(FrontierRedef);
            // Replace all incoming definitions with the omega node for every
            // predecessor where the omega node is defined.
-           for (auto PI = pred_begin(BI), PE = pred_end(BI); PI != PE; ++PI)
+           for (auto PI = pred_begin(BI), PE = pred_end(BI); PI != PE; ++PI) {
              if (DT_->dominates(BB, *PI)) {
                FrontierRedef->removeIncomingValue(*PI);
                FrontierRedef->addIncoming(BranchRedef, *PI);
              }
+           }
+         }
 
   // Replace all users of the V with the new sigma, starting at BB.
   replaceUsesOfWithAfter(V, BranchRedef, BB);
+
+  // TODO: we should probably do replacing in reverse postorder.
+  for (auto &FrontierRedef : FrontierRedefs) {
+    replaceUsesOfWithAfter(FrontierRedef, BranchRedef, BB);
+  }
 }
 
 // Creates a phi node for the given value at the given block.

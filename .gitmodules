@@ -1,4 +1,4 @@
 [submodule "SAGE"]
 	path = SAGE
 	url = http://github.com/henry-nazare/llvm-sage
-	branch = as-llvm-project
+	branch = as-llvm-project-simplify-minmax

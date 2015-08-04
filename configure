@@ -63,6 +63,31 @@ include \\\$(LLVM_SRC_ROOT)/Makefile.rules
 EOF
 )
 
+MAKEFILE_EXAMPLES_BODY=$(cat <<EOF
+##======- lib/*/*/Examples/Makefile ---------------------*- Makefile -*-======##
+##===----------------------------------------------------------------------===##
+
+SOURCES=\\\$(wildcard *.c)
+LLS=\\\$(SOURCES:.c=.ll)
+TESTLLS=\\\$(LLS:.ll=.out.ll)
+TESTOUT=\\\$(LLS:.ll=.out)
+
+all: \\\$(LLS) \\\$(TESTLLS) \\\$(TESTOUT)
+
+%.ll: %.c
+	$BIN_DIR/clang \\\$(CFLAGS) -S -emit-llvm \\\$< -o \\\$@
+
+%.out %.out.ll: %.ll
+	../SAGE/bin/sage-opt -load Python.so -load SAGE.so -load SRA.so -mem2reg -sra-annotator -sra-gen-test -S -o \\\$*.out.ll \\\$< 2>\\\$*.out
+
+.PHONY: clean
+
+clean:
+	rm \\\$(LLS) \\\$(TESTLLS) \\\$(TESTOUT)
+
+EOF
+)
+
 cat <<OEOF > config.status
 #!/bin/bash
 
@@ -81,6 +106,12 @@ $MAKEFILE_LLVM_BODY
 EOF
 
 echo "Generated Makefile.llvm"
+
+cat <<EOF > Examples/Makefile
+$MAKEFILE_EXAMPLES_BODY
+EOF
+
+echo "Generated Examples/Makefile"
 
 OEOF
 

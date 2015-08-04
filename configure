@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+# LLVM_CONFIG can be defined to choose which LLVM installtion to use.
+[ -n "$LLVM_CONFIG" ] || LLVM_CONFIG="llvm-config"
+
+command -v "$LLVM_CONFIG" >/dev/null 2>&1 \
+    || { echo >&2 "ERROR: llvm-config not found. Aborting"; exit 1; }
+
+[ -n "$LLVM_SRC_DIR" ] || LLVM_SRC_DIR="$($LLVM_CONFIG --src-root)"
+[ -n "$LLVM_OBJ_DIR" ] || LLVM_OBJ_DIR="$($LLVM_CONFIG --obj-root)"
+[ -n "$PROJ_INSTALL_ROOT" ] || PROJ_INSTALL_ROOT="$($LLVM_CONFIG --libdir)/.."
+
+BIN_DIR=$($LLVM_CONFIG --bindir)
+
+export LLVM_CONFIG
+export LLVM_SRC_DIR
+export LLVM_OBJ_DIR
+export PROJ_INSTALL_ROOT
+
+echo "Configuring SAGE project"
+(cd SAGE && ./configure)
+
+MAKEFILE_BODY=$(cat <<EOF
+##======- Makefile --------------------------------------*- Makefile -*-======##
+##===----------------------------------------------------------------------===##
+
+.PHONY: all install clean
+
+all install:
+	\\\$(MAKE) -C SAGE \\\$@
+	./SAGE/bin/sage -sh -c "\\\$(MAKE) -f Makefile.llvm \\\$@"
+
+clean:
+	\\\$(MAKE) -C SAGE \\\$@
+	\\\$(MAKE) -f Makefile.llvm \\\$@
+
+EOF
+)
+
+MAKEFILE_LLVM_BODY=$(cat <<EOF
+##======- Makefile.llvm ---------------------------------*- Makefile -*-======##
+##===----------------------------------------------------------------------===##
+
+PROJECT_NAME = SRA
+LIBRARYNAME = SRA
+LOADABLE_MODULE = 1
+USEDLIBS =
+
+LEVEL = .
+
+LLVM_SRC_ROOT = $LLVM_SRC_DIR
+LLVM_OBJ_ROOT = $LLVM_OBJ_DIR
+PROJ_SRC_ROOT = .
+PROJ_OBJ_ROOT = .
+PROJ_INSTALL_ROOT = $PROJ_INSTALL_ROOT
+
+include \\\$(LLVM_OBJ_ROOT)/Makefile.config
+
+CXXFLAGS += -std=c++0x -Wno-deprecated-declarations -fexceptions -Wall -Wextra
+
+include \\\$(LLVM_SRC_ROOT)/Makefile.rules
+
+EOF
+)
+
+cat <<OEOF > config.status
+#!/bin/bash
+
+echo "Using $LLVM_SRC_DIR as LLVM source directory"
+echo "Using $LLVM_OBJ_DIR as LLVM object directory"
+echo "Using $PROJ_INSTALL_ROOT as installation root"
+
+cat <<EOF > Makefile
+$MAKEFILE_BODY
+EOF
+
+echo "Generated Makefile"
+
+cat <<EOF > Makefile.llvm
+$MAKEFILE_LLVM_BODY
+EOF
+
+echo "Generated Makefile.llvm"
+
+OEOF
+
+chmod +x config.status
+echo "Generated config.status"
+echo "Executing config.status"
+./config.status
+

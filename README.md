@@ -4,7 +4,7 @@
 
 Update the submodules recursively and call make, as seen below.
 
-    git submodule update --init --recursive
+    git submodule update --init --recursive --remote
     make
 
 If the required version of SAGE is not installed, it will be downloaded and

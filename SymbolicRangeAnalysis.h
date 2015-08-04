@@ -18,13 +18,13 @@
 
 using namespace llvm;
 
-class SymbolicRangeAnalysis : public ModulePass {
+class SymbolicRangeAnalysis : public FunctionPass {
 public:
   static char ID;
-  SymbolicRangeAnalysis() : ModulePass(ID) { }
+  SymbolicRangeAnalysis() : FunctionPass(ID) { }
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual bool runOnModule(Module&);
+  virtual bool runOnFunction(Function&);
   virtual void print(raw_ostream &OS, const Module*) const;
 
   SAGEExpr  getBottomExpr() const;

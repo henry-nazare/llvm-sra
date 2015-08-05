@@ -37,13 +37,13 @@ static SAGERange GetBoundsForTy(Type *Ty, SAGEInterface *SI) {
   if (ShouldUseSymBounds) {
     switch (Width) {
       case 8:
-        return SAGERange(SAGEExpr(*SI, "UCHAR_MAX"), SAGEExpr(*SI, "CHAR_MIN"));
+        return SAGERange(SAGEExpr(*SI, "CHAR_MIN"), SAGEExpr(*SI, "UCHAR_MAX"));
       case 16:
-        return SAGERange(SAGEExpr(*SI, "USHRT_MAX"), SAGEExpr(*SI, "SHRT_MIN"));
+        return SAGERange(SAGEExpr(*SI, "SHRT_MIN"), SAGEExpr(*SI, "USHRT_MAX"));
       case 32:
-        return SAGERange(SAGEExpr(*SI, "UINT_MAX"), SAGEExpr(*SI, "INT_MIN"));
+        return SAGERange(SAGEExpr(*SI, "INT_MIN"), SAGEExpr(*SI, "UINT_MAX"));
       case 64:
-        return SAGERange(SAGEExpr(*SI, "ULONG_MAX"), SAGEExpr(*SI, "LONG_MIN"));
+        return SAGERange(SAGEExpr(*SI, "LONG_MIN"), SAGEExpr(*SI, "ULONG_MAX"));
     }
   }
   uint64_t Upper = APInt::getMaxValue(Width).getZExtValue();

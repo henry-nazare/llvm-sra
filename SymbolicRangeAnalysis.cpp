@@ -48,7 +48,7 @@ static SAGERange GetBoundsForTy(Type *Ty, SAGEInterface *SI) {
   }
   uint64_t Upper = APInt::getMaxValue(Width).getZExtValue();
   int64_t Lower = APInt::getSignedMinValue(Width).getSExtValue();
-  return SAGERange(SAGEExpr(*SI, Upper), SAGEExpr(*SI, Lower));
+  return SAGERange(SAGEExpr(*SI, Lower), SAGEExpr(*SI, Upper));
 }
 
 static SAGERange GetBoundsForValue(Value *V, SAGEInterface *SI) {

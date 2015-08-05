@@ -17,9 +17,6 @@ public:
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual bool runOnModule(Module&);
-
-private:
-  SymbolicRangeAnalysis *SRA_;
 };
 
 static RegisterPass<SymbolicRangeAnalysisGenTest>
@@ -32,11 +29,11 @@ void SymbolicRangeAnalysisGenTest::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool SymbolicRangeAnalysisGenTest::runOnModule(Module& M) {
-  SRA_ = &getAnalysis<SymbolicRangeAnalysis>();
-
   for (auto &F : M) {
     if (F.isIntrinsic() || F.isDeclaration())
       continue;
+
+    auto &SRA = getAnalysis<SymbolicRangeAnalysis>(F);
 
     for (auto &BB : F) {
       IRBuilder<> IRB(BB.getTerminator());
@@ -47,9 +44,9 @@ bool SymbolicRangeAnalysisGenTest::runOnModule(Module& M) {
         }
 
       for (auto I : Ins) {
-        DEBUG(dbgs() << "Generating ranges: " << SRA_->getStateOrInf(I)
+        DEBUG(dbgs() << "Generating ranges: " << SRA.getStateOrInf(I)
                      << " for instruction " << *I << "\n");
-        SRA_->getRangeValuesFor(I, IRB);
+        SRA.getRangeValuesFor(I, IRB);
       }
     }
   }

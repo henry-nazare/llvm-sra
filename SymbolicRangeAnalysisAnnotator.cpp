@@ -14,9 +14,6 @@ public:
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual bool runOnModule(Module&);
-
-private:
-  SymbolicRangeAnalysis *SRA_;
 };
 
 static RegisterPass<SymbolicRangeAnalysisAnnotator>
@@ -29,11 +26,11 @@ void SymbolicRangeAnalysisAnnotator::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool SymbolicRangeAnalysisAnnotator::runOnModule(Module& M) {
-  SRA_ = &getAnalysis<SymbolicRangeAnalysis>();
-
   for (auto &F : M) {
     if (F.isIntrinsic() || F.isDeclaration())
       continue;
+
+    auto &SRA = getAnalysis<SymbolicRangeAnalysis>(F);
 
     LLVMContext& C = M.getContext();
     std::string Range;
@@ -41,7 +38,7 @@ bool SymbolicRangeAnalysisAnnotator::runOnModule(Module& M) {
     for (auto &BB : F)
       for (auto &I : BB)
         if (I.getType()->isIntegerTy()) {
-          Stream << SRA_->getStateOrInf(&I);
+          Stream << SRA.getStateOrInf(&I);
           I.setMetadata("sra", MDNode::get(C, MDString::get(C, Stream.str())));
           Stream.str().clear();
         }

@@ -62,17 +62,36 @@ static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
        RHS = SRA->getStateOrInf(BO->getOperand(1));
 
   switch (BO->getOpcode()) {
-    case Instruction::Add:
-      return LHS + RHS;
-    case Instruction::Sub:
-      return LHS - RHS;
-    case Instruction::Mul:
-      return LHS * RHS;
+    case Instruction::Add: {
+      DEBUG(dbgs() << "     BinaryOp: " << LHS << " + " << RHS << "\n");
+      auto Ret = LHS + RHS;
+      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+      return Ret;
+    }
+    case Instruction::Sub: {
+      DEBUG(dbgs() << "     BinaryOp: " << LHS << " - " << RHS << "\n");
+      auto Ret = LHS - RHS;
+      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+      return Ret;
+    }
+    case Instruction::Mul: {
+      DEBUG(dbgs() << "     BinaryOp: " << LHS << " * " << RHS << "\n");
+      auto Ret = LHS * RHS;
+      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+      return Ret;
+    }
     case Instruction::SDiv:
-    case Instruction::UDiv:
-      return LHS/RHS;
-    default:
-      return GetBoundsForValue(BO, &SRA->getSI());
+    case Instruction::UDiv: {
+      DEBUG(dbgs() << "     BinaryOp: " << LHS << "/" << RHS << "\n");
+      auto Ret = LHS/RHS;
+      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+      return Ret;
+    }
+    default: {
+      auto Ret = GetBoundsForValue(BO, &SRA->getSI());
+      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+      return Ret;
+    }
   }
 }
 
@@ -87,26 +106,33 @@ static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
   switch (Pred) {
     case CmpInst::ICMP_SLT:
     case CmpInst::ICMP_ULT:
+      DEBUG(dbgs() << "     Narrow: " << Ret << " < " << Bound << "\n");
       Ret.setUpper(Bound.getUpper() - 1);
       break;
     case CmpInst::ICMP_SLE:
     case CmpInst::ICMP_ULE:
+      DEBUG(dbgs() << "     Narrow: " << Ret << " <= " << Bound << "\n");
       Ret.setUpper(Bound.getUpper());
       break;
     case CmpInst::ICMP_SGT:
     case CmpInst::ICMP_UGT:
+      DEBUG(dbgs() << "     Narrow: " << Ret << " > " << Bound << "\n");
       Ret.setLower(Bound.getLower() + 1);
       break;
     case CmpInst::ICMP_SGE:
     case CmpInst::ICMP_UGE:
+      DEBUG(dbgs() << "     Narrow: " << Ret << " >= " << Bound << "\n");
       Ret.setLower(Bound.getLower());
       break;
     case CmpInst::ICMP_EQ:
+      DEBUG(dbgs() << "     Narrow: " << Ret << " = " << Bound << "\n");
       Ret = Bound;
       break;
     default:
       break;
   }
+
+  DEBUG(dbgs() << "     Narrow: return " << Ret << "\n");
   return Ret;
 }
 
@@ -118,6 +144,8 @@ static SAGERange Meet(PHINode *Phi, SymbolicRangeAnalysis *SRA) {
         GetBoundsForTy(cast<IntegerType>(Phi->getType()), &SRA->getSI());
     Ret.setLower(Ret.getLower());
     Ret.setUpper(Ret.getUpper());
+    DEBUG(dbgs() << "     Meet: pruning evaluation\n");
+    DEBUG(dbgs() << "     Meet: return " << Ret << "\n");
     return Ret;
   }
 
@@ -126,13 +154,18 @@ static SAGERange Meet(PHINode *Phi, SymbolicRangeAnalysis *SRA) {
   for (; Ret == SRA->getBottom() && OI != OE; ++OI)
     Ret = SRA->getState(*OI);
 
+  DEBUG(dbgs() << "     Meet: starting with " << Ret << "\n");
+
   for (; OI != OE; ++OI) {
     SAGERange Incoming = SRA->getState(*OI);
     if (Incoming == SRA->getBottom())
       continue;
     Ret.setLower(Ret.getLower().min(Incoming.getLower()));
     Ret.setUpper(Ret.getUpper().max(Incoming.getUpper()));
+    DEBUG(dbgs() << "     Meet: meet " << Ret << " and " << Incoming << "\n");
   }
+
+  DEBUG(dbgs() << "     Meet: return " << Ret << "\n");
   return Ret;
 }
 

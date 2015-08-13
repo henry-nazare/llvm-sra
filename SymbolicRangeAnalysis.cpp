@@ -81,6 +81,16 @@ static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
     }
     case Instruction::Mul: {
       DEBUG(dbgs() << "     BinaryOp: " << LHS << " * " << RHS << "\n");
+
+      bool boundsShouldBeInf = LHS.getLower().isMinusInf()
+          || RHS.getLower().isMinusInf() || LHS.getUpper().isPlusInf()
+          || RHS.getUpper().isPlusInf();
+      if (boundsShouldBeInf) {
+        auto Ret = GetBoundsForValue(BO, &SRA->getSI());
+        DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+        return Ret;
+      }
+
       auto Ret = LHS * RHS;
       DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
       return Ret;
@@ -88,6 +98,16 @@ static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
     case Instruction::SDiv:
     case Instruction::UDiv: {
       DEBUG(dbgs() << "     BinaryOp: " << LHS << "/" << RHS << "\n");
+
+      bool boundsShouldBeInf = LHS.getLower().isMinusInf()
+          || RHS.getLower().isMinusInf() || LHS.getUpper().isPlusInf()
+          || RHS.getUpper().isPlusInf();
+      if (boundsShouldBeInf) {
+        auto Ret = GetBoundsForValue(BO, &SRA->getSI());
+        DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
+        return Ret;
+      }
+
       auto Ret = LHS/RHS;
       DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
       return Ret;

@@ -29,6 +29,11 @@ static cl::opt<int>
         cl::desc("Maximum number of operands on phi nodes, phi nodes which"
             "have more will not be evaluated"));
 
+static cl::opt<int>
+    MaxExprSize("sra-max-expr-size", cl::init(8), cl::Hidden,
+        cl::desc("Maximum number of (recursive) arguments to min/max"
+            " expressions before they're widened to -oo/+oo"));
+
 const unsigned CHANGED_LOWER = 1 << 0;
 const unsigned CHANGED_UPPER = 1 << 1;
 
@@ -232,6 +237,16 @@ std::string SymbolicRangeAnalysis::getName(Value *V) const {
 
 void SymbolicRangeAnalysis::setState(Value *V, SAGERange Range) {
   DEBUG(dbgs() << "SRA: setState(" << *V << "," << Range << ")\n");
+
+  auto Bounds = GetBoundsForValue(V, SI_);
+  if (Range.getLower().getSize() > MaxExprSize) {
+    Range.setLower(Bounds.getLower());
+  }
+
+  if (Range.getUpper().getSize() > MaxExprSize) {
+    Range.setUpper(Bounds.getUpper());
+  }
+
   auto It = State_.insert(std::make_pair(V, Range));
   if (!It.second) {
     if (It.first->second != Range)

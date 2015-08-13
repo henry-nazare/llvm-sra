@@ -10,13 +10,13 @@
 
 using namespace llvm;
 
-class SymbolicRangeAnalysisGenTest : public ModulePass {
+class SymbolicRangeAnalysisGenTest : public FunctionPass {
 public:
   static char ID;
-  SymbolicRangeAnalysisGenTest() : ModulePass(ID) { }
+  SymbolicRangeAnalysisGenTest() : FunctionPass(ID) { }
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual bool runOnModule(Module&);
+  virtual bool runOnFunction(Function&);
 };
 
 static RegisterPass<SymbolicRangeAnalysisGenTest>
@@ -28,26 +28,23 @@ void SymbolicRangeAnalysisGenTest::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
 
-bool SymbolicRangeAnalysisGenTest::runOnModule(Module& M) {
-  for (auto &F : M) {
-    if (F.isIntrinsic() || F.isDeclaration())
-      continue;
+bool SymbolicRangeAnalysisGenTest::runOnFunction(Function& F) {
+  auto &SRA = getAnalysis<SymbolicRangeAnalysis>();
 
-    auto &SRA = getAnalysis<SymbolicRangeAnalysis>(F);
+  dbgs() << "SRA-GEN: runOnFunction: " << F.getName() << "\n";
 
-    for (auto &BB : F) {
-      IRBuilder<> IRB(BB.getTerminator());
-      std::vector<Instruction*> Ins;
-      for (auto &I : BB)
-        if (I.getType()->isIntegerTy()) {
-          Ins.push_back(&I);
-        }
-
-      for (auto I : Ins) {
-        DEBUG(dbgs() << "Generating ranges: " << SRA.getStateOrInf(I)
-                     << " for instruction " << *I << "\n");
-        SRA.getRangeValuesFor(I, IRB);
+  for (auto &BB : F) {
+    IRBuilder<> IRB(BB.getTerminator());
+    std::vector<Instruction*> Ins;
+    for (auto &I : BB)
+      if (I.getType()->isIntegerTy()) {
+        Ins.push_back(&I);
       }
+
+    for (auto I : Ins) {
+      DEBUG(dbgs() << "Generating ranges: " << SRA.getStateOrInf(I)
+                   << " for instruction " << *I << "\n");
+      SRA.getRangeValuesFor(I, IRB);
     }
   }
 

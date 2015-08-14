@@ -11,11 +11,18 @@
 #include "SAGE/SAGEInterface.h"
 
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
 #include <list>
 #include <set>
+
+#if LLVM_VERSION_MINOR >= 7
+typedef LoopInfoWrapperPass LoopInfoPass;
+#else
+typedef LoopInfo LoopInfoPass;
+#endif
 
 STATISTIC(NumCreatedSigmas, "Number of sigma-phis created");
 STATISTIC(NumCreatedFrontierPhis, "Number of non-sigma-phis created");
@@ -41,6 +48,7 @@ void Redefinition::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<DominanceFrontier>();
   AU.addPreserved<SAGEInterface>();
   AU.addPreserved<PythonInterface>();
+  AU.addPreserved<LoopInfoPass>();
   AU.setPreservesCFG();
 }
 

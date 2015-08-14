@@ -135,7 +135,7 @@ static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
   DEBUG(dbgs() << "SRA: Narrow: " << *Phi << ", " << *V << "\n");
 
   auto Ret   = SRA->getStateOrInf(Phi->getIncomingValue(0)),
-       Bound = SRA->getState(V);
+       Bound = SRA->getStateOrInf(V);
 
   std::set<SAGEExpr> Set;
   switch (Pred) {

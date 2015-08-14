@@ -34,10 +34,20 @@ static cl::opt<int>
         cl::desc("Maximum number of (recursive) arguments to min/max"
             " expressions before they're widened to -oo/+oo"));
 
+static cl::opt<bool>
+    UseNumericBounds("sra-use-numeric-bounds", cl::init(false), cl::Hidden,
+        cl::desc("Use numbers as bounds, instead of -/+oo"));
+
 const unsigned CHANGED_LOWER = 1 << 0;
 const unsigned CHANGED_UPPER = 1 << 1;
 
 static SAGERange GetBoundsForTy(Type *Ty, SAGEInterface *SI) {
+  static SAGERange InfRange =
+      SAGERange(SAGEExpr::getMinusInf(*SI), SAGEExpr::getPlusInf(*SI));
+  if (!UseNumericBounds) {
+    return InfRange;
+  }
+
   unsigned Width = Ty->getIntegerBitWidth();
   if (ShouldUseSymBounds) {
     switch (Width) {

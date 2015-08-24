@@ -3,11 +3,13 @@
 
 #define DEBUG_TYPE "sra"
 
+#include "SAGE/Python/PythonInterface.h"
 #include "SymbolicRangeAnalysis.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/ADT/PostOrderIterator.h"
 
 raw_ostream& operator<<(raw_ostream& OS, const SymbolicRangeAnalysis& SRR) {
   SRR.print(OS, nullptr);
@@ -20,243 +22,41 @@ static RegisterPass<SymbolicRangeAnalysis>
   X("sra", "Symbolic range analysis with SAGE and QEPCAD");
 char SymbolicRangeAnalysis::ID = 0;
 
-static cl::opt<bool>
-    ShouldUseSymBounds("sra-use-sym-bounds", cl::init(false), cl::Hidden,
-        cl::desc("Use symbolic mins & maxes for integer bounds"));
-
-static cl::opt<int>
-    MaxPhiEvalSize("sra-max-phi-eval-size", cl::init(-1), cl::Hidden,
-        cl::desc("Maximum number of operands on phi nodes, phi nodes which"
-            "have more will not be evaluated"));
-
-static cl::opt<int>
-    MaxExprSize("sra-max-expr-size", cl::init(8), cl::Hidden,
-        cl::desc("Maximum number of (recursive) arguments to min/max"
-            " expressions before they're widened to -oo/+oo"));
-
-static cl::opt<bool>
-    UseNumericBounds("sra-use-numeric-bounds", cl::init(false), cl::Hidden,
-        cl::desc("Use numbers as bounds, instead of -/+oo"));
-
-const unsigned CHANGED_LOWER = 1 << 0;
-const unsigned CHANGED_UPPER = 1 << 1;
-
-static SAGERange GetBoundsForTy(Type *Ty, SAGEInterface *SI) {
-  static SAGERange InfRange =
-      SAGERange(SAGEExpr::getMinusInf(*SI), SAGEExpr::getPlusInf(*SI));
-  if (!UseNumericBounds) {
-    return InfRange;
-  }
-
-  unsigned Width = Ty->getIntegerBitWidth();
-  if (ShouldUseSymBounds) {
-    switch (Width) {
-      case 8:
-        return SAGERange(SAGEExpr(*SI, "CHAR_MIN"), SAGEExpr(*SI, "UCHAR_MAX"));
-      case 16:
-        return SAGERange(SAGEExpr(*SI, "SHRT_MIN"), SAGEExpr(*SI, "USHRT_MAX"));
-      case 32:
-        return SAGERange(SAGEExpr(*SI, "INT_MIN"), SAGEExpr(*SI, "UINT_MAX"));
-      case 64:
-        return SAGERange(SAGEExpr(*SI, "LONG_MIN"), SAGEExpr(*SI, "ULONG_MAX"));
-    }
-  }
-  uint64_t Upper = APInt::getMaxValue(Width).getZExtValue();
-  int64_t Lower = APInt::getSignedMinValue(Width).getSExtValue();
-  return SAGERange(SAGEExpr(*SI, Lower), SAGEExpr(*SI, Upper));
-}
-
-static SAGERange GetBoundsForValue(Value *V, SAGEInterface *SI) {
-  return GetBoundsForTy(V->getType(), SI);
-}
-
-static SAGERange BinaryOp(BinaryOperator *BO, SymbolicRangeAnalysis *SRA) {
-  DEBUG(dbgs() << "SRA: BinaryOp: " << *BO << "\n");
-
-  auto LHS = SRA->getStateOrInf(BO->getOperand(0)),
-       RHS = SRA->getStateOrInf(BO->getOperand(1));
-
-  switch (BO->getOpcode()) {
-    case Instruction::Add: {
-      DEBUG(dbgs() << "     BinaryOp: " << LHS << " + " << RHS << "\n");
-      auto Ret = LHS + RHS;
-      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-      return Ret;
-    }
-    case Instruction::Sub: {
-      DEBUG(dbgs() << "     BinaryOp: " << LHS << " - " << RHS << "\n");
-      auto Ret = LHS - RHS;
-      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-      return Ret;
-    }
-    case Instruction::Mul: {
-      DEBUG(dbgs() << "     BinaryOp: " << LHS << " * " << RHS << "\n");
-
-      bool boundsShouldBeInf = LHS.getLower().isMinusInf()
-          || RHS.getLower().isMinusInf() || LHS.getUpper().isPlusInf()
-          || RHS.getUpper().isPlusInf();
-      if (boundsShouldBeInf) {
-        auto Ret = GetBoundsForValue(BO, &SRA->getSI());
-        DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-        return Ret;
-      }
-
-      auto Ret = LHS * RHS;
-      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-      return Ret;
-    }
-    case Instruction::SDiv:
-    case Instruction::UDiv: {
-      DEBUG(dbgs() << "     BinaryOp: " << LHS << "/" << RHS << "\n");
-
-      bool boundsShouldBeInf = LHS.getLower().isMinusInf()
-          || RHS.getLower().isMinusInf() || LHS.getUpper().isPlusInf()
-          || RHS.getUpper().isPlusInf();
-      if (boundsShouldBeInf) {
-        auto Ret = GetBoundsForValue(BO, &SRA->getSI());
-        DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-        return Ret;
-      }
-
-      auto Ret = LHS/RHS;
-      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-      return Ret;
-    }
-    default: {
-      auto Ret = GetBoundsForValue(BO, &SRA->getSI());
-      DEBUG(dbgs() << "     BinaryOp: return " << Ret << "\n");
-      return Ret;
-    }
-  }
-}
-
-static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
-                        SymbolicRangeAnalysis *SRA) {
-  DEBUG(dbgs() << "SRA: Narrow: " << *Phi << ", " << *V << "\n");
-
-  auto Ret   = SRA->getStateOrInf(Phi->getIncomingValue(0)),
-       Bound = SRA->getStateOrInf(V);
-
-  std::set<SAGEExpr> Set;
-  switch (Pred) {
-    case CmpInst::ICMP_SLT:
-    case CmpInst::ICMP_ULT:
-      DEBUG(dbgs() << "     Narrow: " << Ret << " < " << Bound << "\n");
-      Ret.setUpper(Bound.getUpper() - 1);
-      break;
-    case CmpInst::ICMP_SLE:
-    case CmpInst::ICMP_ULE:
-      DEBUG(dbgs() << "     Narrow: " << Ret << " <= " << Bound << "\n");
-      Ret.setUpper(Bound.getUpper());
-      break;
-    case CmpInst::ICMP_SGT:
-    case CmpInst::ICMP_UGT:
-      DEBUG(dbgs() << "     Narrow: " << Ret << " > " << Bound << "\n");
-      Ret.setLower(Bound.getLower() + 1);
-      break;
-    case CmpInst::ICMP_SGE:
-    case CmpInst::ICMP_UGE:
-      DEBUG(dbgs() << "     Narrow: " << Ret << " >= " << Bound << "\n");
-      Ret.setLower(Bound.getLower());
-      break;
-    case CmpInst::ICMP_EQ:
-      DEBUG(dbgs() << "     Narrow: " << Ret << " = " << Bound << "\n");
-      Ret = Bound;
-      break;
-    default:
-      break;
-  }
-
-  DEBUG(dbgs() << "     Narrow: return " << Ret << "\n");
-  return Ret;
-}
-
-static SAGERange Meet(PHINode *Phi, SymbolicRangeAnalysis *SRA) {
-  DEBUG(dbgs() << "SRA: Meet: " << *Phi << "\n");
-
-  if (MaxPhiEvalSize > 0 && Phi->getNumOperands() > (unsigned) MaxPhiEvalSize) {
-    SAGERange Ret =
-        GetBoundsForTy(cast<IntegerType>(Phi->getType()), &SRA->getSI());
-    Ret.setLower(Ret.getLower());
-    Ret.setUpper(Ret.getUpper());
-    DEBUG(dbgs() << "     Meet: pruning evaluation\n");
-    DEBUG(dbgs() << "     Meet: return " << Ret << "\n");
-    return Ret;
-  }
-
-  SAGERange Ret = SRA->getState(Phi->getIncomingValue(0));
-  auto OI = Phi->op_begin(), OE = Phi->op_end();
-  for (; Ret == SRA->getBottom() && OI != OE; ++OI)
-    Ret = SRA->getState(*OI);
-
-  DEBUG(dbgs() << "     Meet: starting with " << Ret << "\n");
-
-  for (; OI != OE; ++OI) {
-    SAGERange Incoming = SRA->getState(*OI);
-    if (Incoming == SRA->getBottom())
-      continue;
-    Ret.setLower(Ret.getLower().min(Incoming.getLower()));
-    Ret.setUpper(Ret.getUpper().max(Incoming.getUpper()));
-    DEBUG(dbgs() << "     Meet: meet " << Ret << " and " << Incoming << "\n");
-  }
-
-  DEBUG(dbgs() << "     Meet: return " << Ret << "\n");
-  return Ret;
-}
-
 void SymbolicRangeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<SAGEInterface>();
+  AU.addRequired<PythonInterface>();
   AU.addRequired<Redefinition>();
   AU.setPreservesAll();
 }
 
 bool SymbolicRangeAnalysis::runOnFunction(Function& F) {
-  Module_ = F.getParent();
-  SI_ = &getAnalysis<SAGEInterface>();
-
-  dbgs() << "SRA: runOnModule: " << F.getName() << "\n";
-
   RDF_ = &getAnalysis<Redefinition>();
 
-  initialize(&F);
-  reset(&F);
-  iterate(&F);
-  reset(&F);
-  iterate(&F);
-  reset(&F);
-  iterate(&F);
-  widen(&F);
+  Sigma_.clear();
+  Incoming_.clear();
 
-  DEBUG(dbgs() << *this << "\n");
+  dbgs() << "SRA: runOnFunction: " << F.getName() << "\n";
+
+  Graph_ = new SraGraph();
+  initialize(&F);
+  Graph_->solve();
 
   return false;
-}
-
-SAGEExpr SymbolicRangeAnalysis::getBottomExpr() const {
-  static SAGEExpr BottomExpr(*SI_, "_BOT_");
-  return BottomExpr;
-}
-
-SAGERange SymbolicRangeAnalysis::getBottom() const {
-  static SAGERange BottomRange(getBottomExpr());
-  return BottomRange;
 }
 
 std::string SymbolicRangeAnalysis::makeName(Function *F, Value *V) {
   static unsigned Temp = 1;
   if (V->hasName()) {
-    auto Name = (F->getName() + Twine("_") + V->getName()).str();
-    std::replace(Name.begin(), Name.end(), '.', '_');
+    auto Name = (F->getName() + Twine("S") + V->getName()).str();
+    std::replace(Name.begin(), Name.end(), '.', 'S');
     return Name;
   } else {
-    auto Name = F->getName() + Twine("_") + Twine(Temp++);
+    auto Name = F->getName() + Twine("S") + Twine(Temp++);
     return Name.str();
   }
 }
 
 void SymbolicRangeAnalysis::setName(Value *V, std::string Name) {
   Name_[V] = Name;
-  Value_[Name] = V;
 }
 
 std::string SymbolicRangeAnalysis::getName(Value *V) const {
@@ -265,65 +65,12 @@ std::string SymbolicRangeAnalysis::getName(Value *V) const {
   return It->second;
 }
 
-void SymbolicRangeAnalysis::setState(Value *V, SAGERange Range) {
-  DEBUG(dbgs() << "SRA: setState(" << *V << "," << Range << ")\n");
-
-  auto Bounds = GetBoundsForValue(V, SI_);
-  if (Range.getLower().getSize() > MaxExprSize) {
-    Range.setLower(Bounds.getLower());
-  }
-
-  if (Range.getUpper().getSize() > MaxExprSize) {
-    Range.setUpper(Bounds.getUpper());
-  }
-
-  auto It = State_.insert(std::make_pair(V, Range));
-  if (!It.second) {
-    if (It.first->second != Range)
-      setChanged(V, It.first->second, Range);
-    It.first->second = Range;
-  } else if (isa<Instruction>(V)) {
-    Changed_[V] = CHANGED_LOWER | CHANGED_UPPER;
-  }
-}
-
-void SymbolicRangeAnalysis::setChanged(Value *V, SAGERange &Prev,
-                                       SAGERange &New) {
-  Changed_[V] = (Prev.getLower().isNE(New.getLower()) ? CHANGED_LOWER : 0) |
-                (Prev.getUpper().isNE(New.getUpper()) ? CHANGED_UPPER : 0);
-}
-
-SAGERange SymbolicRangeAnalysis::getState(Value *V) const {
-  // TODO: Handle ptrtoint.
-  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
-    return SAGEExpr(*SI_, CI->getValue().getSExtValue());
-  if (isa<UndefValue>(V) || isa<Constant>(V))
-    return GetBoundsForValue(V, SI_);
-  auto It = State_.find(V);
-  assert(It != State_.end() && "Requested value is not in map");
-  return It->second;
-}
-
-SAGERange SymbolicRangeAnalysis::getStateOrInf(Value *V) const {
-  auto State = getState(V);
-  return State != getBottom()
-      ? State : GetBoundsForTy(cast<IntegerType>(V->getType()), SI_);
-}
-
-std::pair<Value*, Value*>
-    SymbolicRangeAnalysis::getRangeValuesFor(Value *V, IRBuilder<> IRB) const {
-  SAGERange Range = getStateOrInf(V);
-  IntegerType *Ty = cast<IntegerType>(V->getType());
-  Value *Lower = Range.getLower().toValue(Ty, IRB, Value_, Module_),
-        *Upper = Range.getUpper().toValue(Ty, IRB, Value_, Module_);
-  return std::make_pair(Lower, Upper);
-}
-
 void SymbolicRangeAnalysis::createNarrowingFn(Value *LHS, Value *RHS,
                                       CmpInst::Predicate Pred, BasicBlock *BB) {
-  if (auto Redef = RDF_->getRedef(LHS, BB))
-    Fn_[Redef] = [Redef, RHS, Pred, this] ()
-      { return Narrow(Redef, RHS, Pred, this); };
+  if (PHINode *Redef = RDF_->getRedef(LHS, BB)) {
+    Sigma_[Redef] = Pred;
+    Incoming_[Redef] = std::vector<Value*>({Redef->getIncomingValue(0), RHS});
+  }
 }
 
 void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
@@ -354,109 +101,76 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
 }
 
 void SymbolicRangeAnalysis::handleIntInst(Instruction *I) {
-  setName(I,  makeName(I->getParent()->getParent(), I));
-  if (isa<LoadInst>(I))
-    setState(I, GetBoundsForValue(I, SI_));
-  else
-    setState(I, getBottom());
   switch (I->getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
     case Instruction::Mul:
     case Instruction::SDiv:
     case Instruction::UDiv:
-      Fn_[I] = [I, this] ()
-        { return BinaryOp(cast<BinaryOperator>(I), this); };
+      Graph_->addBinOp(cast<BinaryOperator>(I), getName(I));
+      Incoming_[I] = std::vector<Value*>({I->getOperand(0), I->getOperand(1)});
       break;
-    case Instruction::PHI:
-      if (!Fn_.count(I))
-        Fn_[I] = [I, this] ()
-          { return Meet(cast<PHINode>(I), this); };
+    case Instruction::PHI: {
+      PHINode *Phi = cast<PHINode>(I);
+      if (Sigma_.count(Phi)) {
+        Graph_->addSigmaNode(Phi, Sigma_[Phi], getName(Phi));
+        break;
+      }
+      Graph_->addPhiNode(Phi, getName(I));
+      auto Incoming = Phi->incoming_values();
+      Incoming_[I] = std::vector<Value*>(Incoming.begin(), Incoming.end());
       break;
-    case Instruction::Trunc:
-    case Instruction::ZExt:
-    case Instruction::SExt:
-        Fn_[I] = [I, this] ()
-          { return this->getState(*I->op_begin()); };
-      break;
+    }
+    // TODO: handle trunc, zext & sext.
     default:
-      return;
+      Graph_->addNamedConstant(I, getName(I));
   }
 }
 
 void SymbolicRangeAnalysis::initialize(Function *F) {
   // Create symbols for the function's integer arguments.
-  for (auto AI = F->arg_begin(), AE = F->arg_end(); AI != AE; ++AI)
+  for (auto AI = F->arg_begin(), AE = F->arg_end(); AI != AE; ++AI) {
     if (AI->getType()->isIntegerTy()) {
       std::string Name = makeName(F, &(*AI));
       setName(&(*AI), Name);
-      SAGEExpr Arg(*SI_, Name.c_str());
-      // Range is symbolic - [Arg, Arg].
-      setState(&(*AI), SAGERange(Arg));
+      Graph_->addNamedConstant(&(*AI), Name);
     }
+  }
+
+  for (auto &BB : *F) {
+    for (auto &I : BB) {
+      if (I.getType()->isIntegerTy()) {
+        setName(&I, makeName(F, &I));
+      }
+    }
+  }
+
+  ReversePostOrderTraversal<Function*> RPOT(F);
 
   // Create a closure for each instruction.
-  for (auto &BB : *F) {
+  for (auto RI = RPOT.begin(), RE = RPOT.end(); RI != RE; ++RI) {
     // Handle sigma nodes.
-    TerminatorInst *TI = BB.getTerminator();
-    if (BranchInst *BI = dyn_cast<BranchInst>(TI))
-      if (BI->isConditional())
-        if (ICmpInst *ICI = dyn_cast<ICmpInst>(BI->getCondition()))
+    TerminatorInst *TI = (*RI)->getTerminator();
+    if (BranchInst *BI = dyn_cast<BranchInst>(TI)) {
+      if (BI->isConditional()) {
+        if (ICmpInst *ICI = dyn_cast<ICmpInst>(BI->getCondition())) {
           handleBranch(BI, ICI);
+        }
+      }
+    }
 
     // Handle everything that's not a sigma node.
-    for (auto &I : BB)
+    for (auto &I : **RI) {
       if (I.getType()->isIntegerTy()) {
-        Mapping_[&I] = Mapping_.size() + 1;
         handleIntInst(&I);
       }
-  }
-}
-
-void SymbolicRangeAnalysis::reset(Function *F) {
-  for (auto &BB : *F)
-    for (auto &I : BB)
-      if (Changed_.count(&I) && Changed_[&I])
-        Worklist_.insert(std::make_pair(Mapping_[&I], &I));
-
-  Evaled_.clear();
-  Changed_.clear();
-}
-
-void SymbolicRangeAnalysis::iterate(Function *F) {
-  DEBUG(dbgs() << "SRA: Iterate\n");
-  while (!Worklist_.empty()) {
-    auto Next = Worklist_.begin(); Worklist_.erase(Next);
-    Instruction *I = Next->second;
-    if (Fn_.count(I) && !Evaled_.count(I)) {
-      Evaled_.insert(I);
-      setState(I, Fn_[I]());
-      for (auto UI = I->use_begin(), UE = I->use_end(); UI != UE; ++UI)
-        if (Instruction *Use = dyn_cast<Instruction>(*UI))
-          if (!Evaled_.count(Use))
-            Worklist_.insert(std::make_pair(Mapping_[Use], Use));
     }
   }
-}
 
-void SymbolicRangeAnalysis::widen(Function *F) {
-  DEBUG(dbgs() << "SRA: Widen\n");
-  for (auto &BB : *F)
-    for (auto &I : BB)
-      if (I.getType()->isIntegerTy())
-        if (Changed_.count(&I) && Changed_[&I]) {
-          auto State = getStateOrInf(&I);
-          auto Bounds = GetBoundsForValue(&I, SI_);
-          if (Changed_[&I] & CHANGED_LOWER)
-            State.setLower(Bounds.getLower());
-          if (Changed_[&I] & CHANGED_UPPER)
-            State.setUpper(Bounds.getUpper());
-          setState(&I, State);
-        }
-}
-
-void SymbolicRangeAnalysis::print(raw_ostream &OS, const Module*) const {
-  for (auto P : State_)
-    OS << "[[" << getName(P.first) << "]] = " << P.second << "\n";
+  for (auto &P : Incoming_) {
+    for (auto &Incoming : P.second) {
+      Graph_->addIncoming(Incoming, P.first);
+    }
+  }
 }
 

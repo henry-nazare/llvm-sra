@@ -113,6 +113,19 @@ EOF
 
 echo "Generated Examples/Makefile"
 
+[ ! -d bin ] && mkdir bin
+cat <<EOF > bin/sage-opt
+#!/usr/bin/env bash
+
+DIR=\\\$(cd "\\\$(dirname "\\\${BASH_SOURCE[0]}")" && pwd)
+OPT="\\\$DIR/../SAGE/bin/sage-opt"
+PYTHONPATH=\\\$PYTHONPATH:\\\$DIR/../Runtime  \\\$OPT \\\$@"
+
+EOF
+
+chmod +x bin/sage-opt
+echo "Generated bin/sage-opt"
+
 OEOF
 
 chmod +x config.status

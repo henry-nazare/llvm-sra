@@ -1,4 +1,5 @@
 from llvmsage.expr import Expr
+from llvmsage.range import Range
 from llvmsra.range import SraRange
 
 from sage.all import oo, DiGraph
@@ -10,7 +11,7 @@ from operator import attrgetter
 import operator
 
 bottom_expr = Expr("_BOT_")
-bottom_range = SraRange(bottom_expr, bottom_expr)
+bottom_range = Range(bottom_expr, bottom_expr)
 
 def debug(desc, *args):
   pass
@@ -48,7 +49,7 @@ class Node:
         upper = self.state.upper != state.upper)
     # TODO: this 8 shouldn't be hardcoded.
     if state.lower.size() > 8 or state.upper.size() > 8:
-      self.state = SraRange(Expr(-oo), Expr(oo))
+      self.state = Range(Expr(-oo), Expr(oo))
     else:
       self.state = state
 
@@ -112,7 +113,7 @@ class PhiNode(Node):
   def op(self, *incoming):
     if len(incoming) > 8:
       debug("op (meet):", self, len(incoming), "[stop]")
-      return SraRange(Expr(-oo), Expr(oo))
+      return Range(Expr(-oo), Expr(oo))
 
     debug("op (meet):", self, len(incoming), incoming)
     return reduce(lambda acc, i: SraRange.meet(acc, i), \
@@ -247,7 +248,7 @@ class SraGraph(SraGraphSolver):
     return next_id
 
   def get_const(self, name):
-    return ConstNode(name, state=SraRange(Expr(name), Expr(name)))
+    return ConstNode(name, state=Range(Expr(name), Expr(name)))
 
   def get_phi(self, name):
     return PhiNode(name, id=self.get_next_id())

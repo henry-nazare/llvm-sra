@@ -119,7 +119,7 @@ cat <<EOF > bin/sage-opt
 
 DIR=\\\$(cd "\\\$(dirname "\\\${BASH_SOURCE[0]}")" && pwd)
 OPT="\\\$DIR/../SAGE/bin/sage-opt"
-PYTHONPATH=\\\$PYTHONPATH:\\\$DIR/../Runtime  \\\$OPT \\\$@"
+PYTHONPATH=\\\$PYTHONPATH:\\\$DIR/../Runtime \\\$OPT \\\$@
 
 EOF
 

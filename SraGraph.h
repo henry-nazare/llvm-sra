@@ -1,46 +1,66 @@
 #ifndef _SRAGRAPH_H_
 #define _SRAGRAPH_H_
 
+// Should always be the first include.
 #include "SAGE/Python/PythonInterface.h"
-#include "SAGE/SAGERange.h"
+
+#include "Redefinition.h"
+#include "SraNameVault.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 
 #include <map>
+#include <set>
 
 using namespace llvm;
 
-class SraGraph {
+class SraGraph : public llvmpy::PyObjectHolder {
 public:
-  SraGraph();
+  SraGraph(Function *F, Redefinition &RDF, SraNameVault &SNV);
 
-  void addConstantInt(ConstantInt *CI);
-  void addNamedConstant(Value *V, std::string Name);
-  void addPhiNode(PHINode *Phi, std::string Name);
-  void addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred, std::string Name);
-  void addBinOp(BinaryOperator *BO, std::string Name);
-
-  void addIncoming(Value *V, Value *Incoming);
+private:
+  void initialize();
+  void initializeArguments();
+  void initializeIntInsts();
+  void initializeIncoming();
 
   void solve() const;
 
-  SAGERange getRange(Value *V) const;
+  void setNode(Value *V, PyObject *Node);
+  PyObject *getNode(Value *V);
 
-protected:
-  PyObject *getNode(Value *V) const;
-  void setNode(Value *V, PyObject *Obj);
+  PyObject *getNodeName(Value *V) const;
 
+  void addArgument(Argument *A);
+  void addIntInst(Instruction *I);
+
+  void addBinOp(BinaryOperator *BO);
+  void addPhiNode(PHINode *Phi);
+  void addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred);
+
+  PyObject *getBinOp(PyObject *Obj, const char *Op) const;
   PyObject *getConstant(PyObject *Obj) const;
   PyObject *getPhi(PyObject *Obj) const;
-  PyObject *getSigma(PyObject *Obj) const;
-  PyObject *getBinOp(PyObject *Obj, const char *Op) const;
+  PyObject *getSigma(PyObject *Sigma, const char *Op) const;
 
+  template <typename T>
+  void addIncoming(iterator_range<T> RangeFrom, Value *To) {
+    for (auto &From : RangeFrom) {
+      addIncoming(From, To);
+    }
+  }
+
+  void addIncoming(Value *V, Value *Incoming);
   void addIncoming(PyObject *Node, PyObject *Incoming) const;
 
 private:
-  PyObject *Graph_;
-  std::map<Value*, PyObject*> Nodes_;
+  Function *F_;
+  Redefinition &RDF_;
+  SraNameVault &SNV_;
+
+  std::map<Value*, PyObject*> Node_;
+  std::set<Instruction*> NodesWithIncoming_;
 };
 
 #endif

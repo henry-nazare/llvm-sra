@@ -36,6 +36,8 @@ std::string SraNameVault::makeName(Value *V) const {
     Temp = Temp + 1;
   }
 
-  return Prefix + Name;
+  std::string Ret = Prefix + Name;
+  std::replace(Ret.begin(), Ret.end(), '.', '_');
+  return Ret;
 }
 

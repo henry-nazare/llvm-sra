@@ -115,20 +115,24 @@ void SraGraph::solve() const {
 }
 
 void SraGraph::setNode(Value *V, PyObject *Node) {
-  dbgs() << "setNode: " << *V << ", " << *Node << "\n";
   Node_[V] = Node;
 }
 
 PyObject *SraGraph::getNode(Value *V) {
+  assert(V->getType()->isIntegerTy() && "Value is not an integer");
   auto It = Node_.find(V);
-  if (It != Node_.end()) {
-    return It->second;
-  }
 
   // TODO: we also want to handle other constants, such as UndefValue.
-  PyObject *Node = getConstant(Get(cast<ConstantInt>(V)->getValue()));
-  Node_[V] = Node;
-  return Node;
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(V)) {
+    PyObject *Node = getConstant(Get(CI->getValue()));
+    It = Node_.insert(std::make_pair(CI, Node)).first;
+  } else if (isa<Constant>(V)) {
+    PyObject *Node = getConstant(getNodeName(V));
+    It = Node_.insert(std::make_pair(CI, Node)).first;
+  }
+
+  assert(It != Node_.end() && "Requested value not in node map");
+  return It->second;
 }
 
 PyObject *SraGraph::getNodeName(Value *V) const {

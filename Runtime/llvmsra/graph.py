@@ -254,7 +254,10 @@ class SraGraph(SraGraphSolver):
     return PhiNode(name, id=self.get_next_id())
 
   def get_sigma(self, name, predicate):
-    predicate_ops = { "lt": operator.lt, "gt": operator.gt }
+    predicate_ops = {
+        "lt": operator.lt, "le": operator.le, "gt": operator.gt,
+        "ge": operator.ge
+    }
     return SigmaNode(name, predicate_ops[predicate], id=self.get_next_id())
 
   def get_binop(self, name, binop):

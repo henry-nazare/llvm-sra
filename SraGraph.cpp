@@ -74,6 +74,13 @@ SraGraph::SraGraph(Function *F, Redefinition &RDF, SraNameVault &SNV)
   solve();
 }
 
+SAGERange SraGraph::getRange(Value *V) const {
+  static PythonAttrInfo graph_Node_state("state");
+  auto It = Node_.find(V);
+  assert(It != Node_.end() && "Requested value not in map");
+  return graph_Node_state.get(It->second);
+}
+
 void SraGraph::initialize() {
   initializeArguments();
   initializeIntInsts();

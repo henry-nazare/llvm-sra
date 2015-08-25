@@ -7,6 +7,8 @@
 #include "Redefinition.h"
 #include "SraNameVault.h"
 
+#include "SAGE/SAGERange.h"
+
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 
@@ -18,6 +20,8 @@ using namespace llvm;
 class SraGraph : public llvmpy::PyObjectHolder {
 public:
   SraGraph(Function *F, Redefinition &RDF, SraNameVault &SNV);
+
+  SAGERange getRange(Value *V) const;
 
 private:
   void initialize();

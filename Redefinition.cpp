@@ -87,7 +87,12 @@ void Redefinition::createSigmasForCondBranch(BranchInst *BI) {
   assert(BI->isConditional() && "Expected conditional branch");
 
   ICmpInst *ICI = dyn_cast<ICmpInst>(BI->getCondition());
-  if (!ICI || !ICI->getOperand(0)->getType()->isIntegerTy())
+  if (!ICI || !ICI->getOperand(0)->getType()->isIntegerTy() ||
+      ICI->getParent() != BI->getParent())
+    return;
+
+  if (ICI->getPredicate() == CmpInst::ICMP_NE
+      || ICI->getPredicate() == CmpInst::ICMP_EQ)
     return;
 
   DEBUG(dbgs() << "createSigmasForCondBranch: " << *BI << "\n");

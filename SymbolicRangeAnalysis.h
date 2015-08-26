@@ -51,6 +51,9 @@ public:
   void createNarrowingFn(Value *LHS, Value *RHS,
                          CmpInst::Predicate Pred, BasicBlock *BB);
 
+  bool hasStableLowerBound(Value *V) const;
+  bool hasStableUpperBound(Value *V) const;
+
   void setChanged(Value *V, SAGERange &Prev, SAGERange &New);
 
   SAGEInterface &getSI() { return *SI_; }
@@ -64,6 +67,7 @@ private:
   std::map<std::string, Value*> Value_;
   std::map<Value*, SAGERange>   State_;
   std::map<Value*, unsigned>    Changed_;
+  std::map<Value*, std::pair<bool, bool>> StableBounds_;
 
   std::map< Instruction*, std::function<SAGERange()> > Fn_;
 

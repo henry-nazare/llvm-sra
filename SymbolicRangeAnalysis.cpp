@@ -1,4 +1,5 @@
 //===---------------------- SymbolicRangeAnalysis.cpp ---------------------===//
+
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "sra"
@@ -137,7 +138,6 @@ static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
   auto Ret   = SRA->getStateOrInf(Phi->getIncomingValue(0)),
        Bound = SRA->getStateOrInf(V);
 
-  std::set<SAGEExpr> Set;
   switch (Pred) {
     case CmpInst::ICMP_SLT:
     case CmpInst::ICMP_ULT:
@@ -162,6 +162,17 @@ static SAGERange Narrow(PHINode *Phi, Value *V, ICmpInst::Predicate Pred,
     case CmpInst::ICMP_EQ:
       DEBUG(dbgs() << "     Narrow: " << Ret << " = " << Bound << "\n");
       Ret = Bound;
+      break;
+    case CmpInst::ICMP_NE:
+      if (SRA->hasStableLowerBound(Phi)) {
+        DEBUG(dbgs() << "     Narrow: " << Ret << " != " << Bound
+            << " (lower)\n");
+        Ret.setUpper(Bound.getUpper() - 1);
+      } else if (SRA->hasStableUpperBound(Phi)) {
+        DEBUG(dbgs() << "     Narrow: " << Ret << " != " << Bound
+            << " (upper)\n");
+        Ret.setLower(Bound.getLower() + 1);
+      }
       break;
     default:
       break;
@@ -289,8 +300,30 @@ void SymbolicRangeAnalysis::setState(Value *V, SAGERange Range) {
 
 void SymbolicRangeAnalysis::setChanged(Value *V, SAGERange &Prev,
                                        SAGERange &New) {
-  Changed_[V] = (Prev.getLower().isNE(New.getLower()) ? CHANGED_LOWER : 0) |
-                (Prev.getUpper().isNE(New.getUpper()) ? CHANGED_UPPER : 0);
+  unsigned Changed = (Prev.getLower().isNE(New.getLower()) ? CHANGED_LOWER : 0)
+      | (Prev.getUpper().isNE(New.getUpper()) ? CHANGED_UPPER : 0);
+  Changed_[V] = Changed;
+
+  auto It = StableBounds_.find(V);
+  if (It == StableBounds_.end()) {
+    StableBounds_[V] = std::make_pair(true, true);
+    return;
+  }
+
+  bool StableLower = !(Changed & CHANGED_LOWER),
+      StableUpper = !(Changed & CHANGED_UPPER);
+  It->second = std::make_pair(
+      It->second.first & StableLower, It->second.second & StableUpper);
+}
+
+bool SymbolicRangeAnalysis::hasStableLowerBound(Value *V) const {
+  auto It = StableBounds_.find(V);
+  return It == StableBounds_.end() ? false : It->second.first;
+}
+
+bool SymbolicRangeAnalysis::hasStableUpperBound(Value *V) const {
+  auto It = StableBounds_.find(V);
+  return It == StableBounds_.end() ? false : It->second.second;
 }
 
 SAGERange SymbolicRangeAnalysis::getState(Value *V) const {
@@ -355,8 +388,9 @@ void SymbolicRangeAnalysis::handleBranch(BranchInst *BI, ICmpInst *ICI) {
 
 void SymbolicRangeAnalysis::handleIntInst(Instruction *I) {
   setName(I,  makeName(I->getParent()->getParent(), I));
+  //  setState(I, GetBoundsForValue(I, SI_));
   if (isa<LoadInst>(I))
-    setState(I, GetBoundsForValue(I, SI_));
+    setState(I, SAGEExpr(*SI_, getName(I).c_str()));
   else
     setState(I, getBottom());
   switch (I->getOpcode()) {

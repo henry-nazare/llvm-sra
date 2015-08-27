@@ -68,7 +68,7 @@ static std::pair<CmpInst::Predicate, Value*>
 }
 
 static SRAGraphObjInfo graph_SRAGraph(nullptr);
-SRAGraph::SRAGraph(Function *F, Redefinition &RDF, SraNameVault &SNV)
+SRAGraph::SRAGraph(Function *F, Redefinition &RDF, SAGENameVault &SNV)
     : PyObjectHolder(graph_SRAGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
   initialize();
   solve();

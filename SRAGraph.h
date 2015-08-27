@@ -5,8 +5,8 @@
 #include "SAGE/Python/PythonInterface.h"
 
 #include "Redefinition.h"
-#include "SraNameVault.h"
 
+#include "SAGE/SAGENameVault.h"
 #include "SAGE/SAGERange.h"
 
 #include "llvm/IR/Constants.h"
@@ -19,7 +19,7 @@ using namespace llvm;
 
 class SRAGraph : public llvmpy::PyObjectHolder {
 public:
-  SRAGraph(Function *F, Redefinition &RDF, SraNameVault &SNV);
+  SRAGraph(Function *F, Redefinition &RDF, SAGENameVault &SNV);
 
   SAGERange getRange(Value *V) const;
 
@@ -61,7 +61,7 @@ private:
 private:
   Function *F_;
   Redefinition &RDF_;
-  SraNameVault &SNV_;
+  SAGENameVault &SNV_;
 
   std::map<Value*, PyObject*> Node_;
   std::set<Instruction*> NodesWithIncoming_;

@@ -180,7 +180,7 @@ class BinopNode(Node):
     debug("op_asmp (binop):", self, lhs, rhs)
     return (self.expr.eq(self.binop(lhs.expr, rhs.expr))) & lhs.asmp & rhs.asmp
 
-class SraGraphSolver:
+class SRAGraphSolver:
   def __init__(self):
     self.graph = DiGraph()
 
@@ -237,9 +237,9 @@ class SraGraphSolver:
         sorted(self.graph.get_vertices().keys(), key=attrgetter("id"))
     return "\n".join(map(repr, ordered_nodes))
 
-class SraGraph(SraGraphSolver):
+class SRAGraph(SRAGraphSolver):
   def __init__(self):
-    SraGraphSolver.__init__(self)
+    SRAGraphSolver.__init__(self)
     self.next_id = 0
 
   def get_next_id(self):

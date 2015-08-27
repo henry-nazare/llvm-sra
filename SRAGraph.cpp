@@ -1,6 +1,6 @@
 #define DEBUG_TYPE "sra-graph"
 
-#include "SraGraph.h"
+#include "SRAGraph.h"
 
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
@@ -10,9 +10,9 @@ using llvmpy::Get;
 
 namespace {
 
-struct SraGraphObjInfo : public PythonObjInfo {
-  SraGraphObjInfo(const char *Fn)
-      : PythonObjInfo("llvmsra.graph", "SraGraph", Fn) {}
+struct SRAGraphObjInfo : public PythonObjInfo {
+  SRAGraphObjInfo(const char *Fn)
+      : PythonObjInfo("llvmsra.graph", "SRAGraph", Fn) {}
 };
 
 } // end anonymous namespace
@@ -67,27 +67,27 @@ static std::pair<CmpInst::Predicate, Value*>
       : std::make_pair(GetSwappedInversePredicate(ICI), LHS);
 }
 
-static SraGraphObjInfo graph_SraGraph(nullptr);
-SraGraph::SraGraph(Function *F, Redefinition &RDF, SraNameVault &SNV)
-    : PyObjectHolder(graph_SraGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
+static SRAGraphObjInfo graph_SRAGraph(nullptr);
+SRAGraph::SRAGraph(Function *F, Redefinition &RDF, SraNameVault &SNV)
+    : PyObjectHolder(graph_SRAGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
   initialize();
   solve();
 }
 
-SAGERange SraGraph::getRange(Value *V) const {
+SAGERange SRAGraph::getRange(Value *V) const {
   static PythonAttrInfo graph_Node_state("state");
   auto It = Node_.find(V);
   assert(It != Node_.end() && "Requested value not in map");
   return graph_Node_state.get(It->second);
 }
 
-void SraGraph::initialize() {
+void SRAGraph::initialize() {
   initializeArguments();
   initializeIntInsts();
   initializeIncoming();
 }
 
-void SraGraph::initializeArguments() {
+void SRAGraph::initializeArguments() {
   for (auto &A : F_->args()) {
     if (A.getType()->isIntegerTy()) {
       addArgument(&A);
@@ -95,7 +95,7 @@ void SraGraph::initializeArguments() {
   }
 }
 
-void SraGraph::initializeIntInsts() {
+void SRAGraph::initializeIntInsts() {
   ReversePostOrderTraversal<Function*> RPOT(F_);
   for (auto &BB : Range(RPOT.begin(), RPOT.end())) {
     for (auto &I : *BB) {
@@ -106,7 +106,7 @@ void SraGraph::initializeIntInsts() {
   }
 }
 
-void SraGraph::initializeIncoming() {
+void SRAGraph::initializeIncoming() {
   for (auto &I : NodesWithIncoming_) {
     addIncoming(I->operands(), I);
     if (IsSigmaNode(I, RDF_)) {
@@ -116,16 +116,16 @@ void SraGraph::initializeIncoming() {
   }
 }
 
-void SraGraph::solve() const {
-  static SraGraphObjInfo graph_SraGraph_solve("solve");
-  graph_SraGraph_solve({get()});
+void SRAGraph::solve() const {
+  static SRAGraphObjInfo graph_SRAGraph_solve("solve");
+  graph_SRAGraph_solve({get()});
 }
 
-void SraGraph::setNode(Value *V, PyObject *Node) {
+void SRAGraph::setNode(Value *V, PyObject *Node) {
   Node_[V] = Node;
 }
 
-PyObject *SraGraph::getNode(Value *V) {
+PyObject *SRAGraph::getNode(Value *V) {
   assert(V->getType()->isIntegerTy() && "Value is not an integer");
   auto It = Node_.find(V);
 
@@ -142,7 +142,7 @@ PyObject *SraGraph::getNode(Value *V) {
   return It->second;
 }
 
-PyObject *SraGraph::getNodeName(Value *V) const {
+PyObject *SRAGraph::getNodeName(Value *V) const {
   // TODO: we also want to handle other constants, such as UndefValue.
   if (ConstantInt *CI = dyn_cast<ConstantInt>(V)) {
     return Get(CI->getValue());
@@ -151,12 +151,12 @@ PyObject *SraGraph::getNodeName(Value *V) const {
   return Get(SNV_.getName(V));
 }
 
-void SraGraph::addArgument(Argument *A) {
+void SRAGraph::addArgument(Argument *A) {
   assert(A->getType()->isIntegerTy() && "Can only add integer arguments");
   setNode(A, getConstant(getNodeName(A)));
 }
 
-void SraGraph::addIntInst(Instruction *I) {
+void SRAGraph::addIntInst(Instruction *I) {
   switch (I->getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
@@ -181,7 +181,7 @@ void SraGraph::addIntInst(Instruction *I) {
   }
 }
 
-void SraGraph::addBinOp(BinaryOperator *BO) {
+void SRAGraph::addBinOp(BinaryOperator *BO) {
   NodesWithIncoming_.insert(BO);
   switch (BO->getOpcode()) {
     case Instruction::Add:
@@ -203,12 +203,12 @@ void SraGraph::addBinOp(BinaryOperator *BO) {
   assert(false && "Unhandled binary operator");
 }
 
-void SraGraph::addPhiNode(PHINode *Phi) {
+void SRAGraph::addPhiNode(PHINode *Phi) {
   NodesWithIncoming_.insert(Phi);
   setNode(Phi, getPhi(getNodeName(Phi)));
 }
 
-void SraGraph::addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred) {
+void SRAGraph::addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred) {
   NodesWithIncoming_.insert(Sigma);
   switch (Pred) {
     case ICmpInst::ICMP_SLT:
@@ -233,32 +233,32 @@ void SraGraph::addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred) {
   assert(false && "Unknown predicate");
 }
 
-void SraGraph::addIncoming(Value *From, Value *To) {
+void SRAGraph::addIncoming(Value *From, Value *To) {
   addIncoming(getNode(From), getNode(To));
 }
 
-PyObject *SraGraph::getBinOp(PyObject *Obj, const char *Op) const {
-  static SraGraphObjInfo graph_SraGraph_get_binop("get_binop");
-  return graph_SraGraph_get_binop({get(), Obj, Get(Op)});
+PyObject *SRAGraph::getBinOp(PyObject *Obj, const char *Op) const {
+  static SRAGraphObjInfo graph_SRAGraph_get_binop("get_binop");
+  return graph_SRAGraph_get_binop({get(), Obj, Get(Op)});
 }
 
-PyObject *SraGraph::getConstant(PyObject *Obj) const {
-  static SraGraphObjInfo graph_SraGraph_get_constant("get_const");
-  return graph_SraGraph_get_constant({get(), Obj});
+PyObject *SRAGraph::getConstant(PyObject *Obj) const {
+  static SRAGraphObjInfo graph_SRAGraph_get_constant("get_const");
+  return graph_SRAGraph_get_constant({get(), Obj});
 }
 
-PyObject *SraGraph::getPhi(PyObject *Obj) const {
-  static SraGraphObjInfo graph_SraGraph_get_phi("get_phi");
-  return graph_SraGraph_get_phi({get(), Obj});
+PyObject *SRAGraph::getPhi(PyObject *Obj) const {
+  static SRAGraphObjInfo graph_SRAGraph_get_phi("get_phi");
+  return graph_SRAGraph_get_phi({get(), Obj});
 }
 
-PyObject *SraGraph::getSigma(PyObject *Obj, const char *Op) const {
-  static SraGraphObjInfo graph_SraGraph_get_sigma("get_sigma");
-  return graph_SraGraph_get_sigma({get(), Obj, Get(Op)});
+PyObject *SRAGraph::getSigma(PyObject *Obj, const char *Op) const {
+  static SRAGraphObjInfo graph_SRAGraph_get_sigma("get_sigma");
+  return graph_SRAGraph_get_sigma({get(), Obj, Get(Op)});
 }
 
-void SraGraph::addIncoming(PyObject *From, PyObject *To) const {
-  static SraGraphObjInfo graph_SraGraph_add_incoming("add_edge");
-  graph_SraGraph_add_incoming({get(), From, To});
+void SRAGraph::addIncoming(PyObject *From, PyObject *To) const {
+  static SRAGraphObjInfo graph_SRAGraph_add_incoming("add_edge");
+  graph_SRAGraph_add_incoming({get(), From, To});
 }
 

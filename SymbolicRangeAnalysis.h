@@ -1,9 +1,6 @@
 #ifndef _SYMBOLICRANGEANALYSIS_H_
 #define _SYMBOLICRANGEANALYSIS_H_
 
-#include "SraGraph.h"
-#include "Redefinition.h"
-
 #include "llvm/Pass.h"
 
 using namespace llvm;

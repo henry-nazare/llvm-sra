@@ -17,9 +17,9 @@
 
 using namespace llvm;
 
-class SraGraph : public llvmpy::PyObjectHolder {
+class SRAGraph : public llvmpy::PyObjectHolder {
 public:
-  SraGraph(Function *F, Redefinition &RDF, SraNameVault &SNV);
+  SRAGraph(Function *F, Redefinition &RDF, SraNameVault &SNV);
 
   SAGERange getRange(Value *V) const;
 

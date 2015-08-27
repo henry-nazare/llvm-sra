@@ -6,7 +6,9 @@
 #include "SAGE/Python/PythonInterface.h"
 
 #include "SymbolicRangeAnalysis.h"
+#include "Redefinition.h"
 #include "SraNameVault.h"
+#include "SRAGraph.h"
 
 #include "llvm/Support/Debug.h"
 
@@ -31,7 +33,7 @@ bool SymbolicRangeAnalysis::runOnFunction(Function& F) {
   DEBUG(dbgs() << "SRA: runOnFunction: " << F.getName() << "\n");
 
   SraNameVault SNV;
-  SraGraph G(&F, getAnalysis<Redefinition>(), SNV);
+  SRAGraph G(&F, getAnalysis<Redefinition>(), SNV);
 
   DEBUG(dbgs() << G << "\n");
 

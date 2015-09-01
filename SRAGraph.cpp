@@ -12,7 +12,7 @@ namespace {
 
 struct SRAGraphObjInfo : public PythonObjInfo {
   SRAGraphObjInfo(const char *Fn)
-      : PythonObjInfo("llvmsra.sra_graph", "SRAGraph", Fn) {}
+      : PythonObjInfo("llvmsra.graph", "SRAGraph", Fn) {}
 };
 
 } // end anonymous namespace

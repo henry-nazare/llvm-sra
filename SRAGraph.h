@@ -6,18 +6,18 @@
 
 #include "Redefinition.h"
 
+#include "SAGE/SAGEAnalysisGraph.h"
 #include "SAGE/SAGENameVault.h"
 #include "SAGE/SAGERange.h"
 
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 
-#include <map>
 #include <set>
 
 using namespace llvm;
 
-class SRAGraph : public llvmpy::PyObjectHolder {
+class SRAGraph : public SAGEAnalysisGraph {
 public:
   SRAGraph(Function *F, Redefinition &RDF, SAGENameVault &SNV);
 
@@ -29,12 +29,8 @@ private:
   void initializeIntInsts();
   void initializeIncoming();
 
-  void solve() const;
-
-  void setNode(Value *V, PyObject *Node);
-  PyObject *getNode(Value *V);
-
-  PyObject *getNodeName(Value *V) const;
+  virtual PyObject *getNode(Value *V);
+  virtual PyObject *getNodeName(Value *V) const;
 
   void addArgument(Argument *A);
   void addIntInst(Instruction *I);
@@ -48,22 +44,10 @@ private:
   PyObject *getPhi(PyObject *Obj) const;
   PyObject *getSigma(PyObject *Sigma, const char *Op) const;
 
-  template <typename T>
-  void addIncoming(iterator_range<T> RangeFrom, Value *To) {
-    for (auto &From : RangeFrom) {
-      addIncoming(From, To);
-    }
-  }
-
-  void addIncoming(Value *V, Value *Incoming);
-  void addIncoming(PyObject *Node, PyObject *Incoming) const;
-
 private:
   Function *F_;
   Redefinition &RDF_;
-  SAGENameVault &SNV_;
 
-  std::map<Value*, PyObject*> Node_;
   std::set<Instruction*> NodesWithIncoming_;
 };
 

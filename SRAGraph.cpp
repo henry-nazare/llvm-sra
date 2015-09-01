@@ -81,7 +81,7 @@ static std::pair<CmpInst::Predicate, Value*>
 static SRAGraphObjInfo graph_SRAGraph(nullptr);
 SRAGraph::SRAGraph(
     Function *F, Redefinition &RDF, SAGENameVault &SNV)
-        : PyObjectHolder(graph_SRAGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
+        : SAGEAnalysisGraph(graph_SRAGraph({}), SNV), F_(F), RDF_(RDF) {
   initialize();
   solve();
 }
@@ -126,15 +126,6 @@ void SRAGraph::initializeIncoming() {
       addIncoming(Bound.second, I);
     }
   }
-}
-
-void SRAGraph::solve() const {
-  static SRAGraphObjInfo graph_SRAGraph_solve("solve");
-  graph_SRAGraph_solve({get()});
-}
-
-void SRAGraph::setNode(Value *V, PyObject *Node) {
-  Node_[V] = Node;
 }
 
 PyObject *SRAGraph::getNode(Value *V) {
@@ -203,10 +194,6 @@ void SRAGraph::addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred) {
   setNode(Sigma, getSigma(getNodeName(Sigma), It->second));
 }
 
-void SRAGraph::addIncoming(Value *From, Value *To) {
-  addIncoming(getNode(From), getNode(To));
-}
-
 PyObject *SRAGraph::getBinOp(PyObject *Obj, const char *Op) const {
   static SRAGraphObjInfo graph_SRAGraph_get_binop("get_binop");
   return graph_SRAGraph_get_binop({get(), Obj, Get(Op)});
@@ -225,10 +212,5 @@ PyObject *SRAGraph::getPhi(PyObject *Obj) const {
 PyObject *SRAGraph::getSigma(PyObject *Obj, const char *Op) const {
   static SRAGraphObjInfo graph_SRAGraph_get_sigma("get_sigma");
   return graph_SRAGraph_get_sigma({get(), Obj, Get(Op)});
-}
-
-void SRAGraph::addIncoming(PyObject *From, PyObject *To) const {
-  static SRAGraphObjInfo graph_SRAGraph_add_incoming("add_edge");
-  graph_SRAGraph_add_incoming({get(), From, To});
 }
 

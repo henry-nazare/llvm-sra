@@ -22,22 +22,33 @@ static iterator_range<T> Range(T begin, T end) {
   return iterator_range<T>(begin, end);
 }
 
+static std::map<unsigned, const char*> HandledBinaryOperators = {
+  {Instruction::Add, "add"}, {Instruction::Sub, "sub"},
+  {Instruction::Mul, "mul"}, {Instruction::SDiv, "div"},
+  {Instruction::UDiv, "div"}
+};
+
+static std::map<CmpInst::Predicate, const char*> HandledCmpPredicates = {
+  {ICmpInst::ICMP_SLT, "lt"}, {ICmpInst::ICMP_ULT, "lt"},
+  {ICmpInst::ICMP_SLE, "le"}, {ICmpInst::ICMP_ULE, "le"},
+  {ICmpInst::ICMP_SGT, "gt"}, {ICmpInst::ICMP_UGT, "gt"},
+  {ICmpInst::ICMP_SGE, "ge"}, {ICmpInst::ICMP_UGE, "ge"}
+};
+
+static std::map<CmpInst::Predicate, CmpInst::Predicate>
+    SwappedInversePredicate = {
+  {ICmpInst::ICMP_SLT, ICmpInst::ICMP_SLE},
+  {ICmpInst::ICMP_SLE, ICmpInst::ICMP_SLT},
+  {ICmpInst::ICMP_SGT, ICmpInst::ICMP_SGE},
+  {ICmpInst::ICMP_SGE, ICmpInst::ICMP_SGT},
+  {ICmpInst::ICMP_EQ, ICmpInst::ICMP_EQ},
+  {ICmpInst::ICMP_NE, ICmpInst::ICMP_NE}
+};
+
 static bool IsSigmaNode(Instruction *I, Redefinition &RDF) {
   PHINode *Phi = dyn_cast<PHINode>(I);
   return Phi && Phi->getNumIncomingValues() == 1 &&
       RDF.getRedef(Phi->getIncomingValue(0), Phi->getParent()) == Phi;
-}
-
-static CmpInst::Predicate GetSwappedInversePredicate(ICmpInst *ICI) {
-  ICmpInst::Predicate Pred = ICI->getPredicate();
-  if (ICI->isEquality()) {
-    return Pred;
-  } else if (ICI->isTrueWhenEqual()) {
-    return (ICmpInst::Predicate)(Pred - 1);
-  }
-
-  assert(ICI->isFalseWhenEqual());
-  return (ICmpInst::Predicate)(Pred + 1);
 }
 
 static std::pair<CmpInst::Predicate, Value*>
@@ -64,12 +75,13 @@ static std::pair<CmpInst::Predicate, Value*>
 
   return Incoming == LHS
       ? std::make_pair(ICI->getInversePredicate(), RHS)
-      : std::make_pair(GetSwappedInversePredicate(ICI), LHS);
+      : std::make_pair(SwappedInversePredicate.at(ICI->getPredicate()), LHS);
 }
 
 static SRAGraphObjInfo graph_SRAGraph(nullptr);
-SRAGraph::SRAGraph(Function *F, Redefinition &RDF, SAGENameVault &SNV)
-    : PyObjectHolder(graph_SRAGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
+SRAGraph::SRAGraph(
+    Function *F, Redefinition &RDF, SAGENameVault &SNV)
+        : PyObjectHolder(graph_SRAGraph({})), F_(F), RDF_(RDF), SNV_(SNV) {
   initialize();
   solve();
 }
@@ -157,50 +169,26 @@ void SRAGraph::addArgument(Argument *A) {
 }
 
 void SRAGraph::addIntInst(Instruction *I) {
-  switch (I->getOpcode()) {
-    case Instruction::Add:
-    case Instruction::Sub:
-    case Instruction::Mul:
-    case Instruction::SDiv:
-    case Instruction::UDiv:
-      addBinOp(cast<BinaryOperator>(I));
-      break;
-    case Instruction::PHI: {
-      PHINode *Phi = cast<PHINode>(I);
-      if (IsSigmaNode(Phi, RDF_)) {
-        auto Bound = GetSigmaBound(Phi, RDF_);
-        addSigmaNode(Phi, Bound.first);
-        break;
-      }
-      addPhiNode(Phi);
-      break;
-    }
-    default:
-      setNode(I, getConstant(getNodeName(I)));
-      break;
+  if (HandledBinaryOperators.count(I->getOpcode())) {
+    return (void) addBinOp(cast<BinaryOperator>(I));
   }
+
+  if (PHINode *Phi = dyn_cast<PHINode>(I)) {
+    if (IsSigmaNode(Phi, RDF_)) {
+      auto Bound = GetSigmaBound(Phi, RDF_);
+      return (void) addSigmaNode(Phi, Bound.first);
+    }
+    return (void) addPhiNode(Phi);
+  }
+
+  setNode(I, getConstant(getNodeName(I)));
 }
 
 void SRAGraph::addBinOp(BinaryOperator *BO) {
+  auto It = HandledBinaryOperators.find(BO->getOpcode());
+  assert(It != HandledBinaryOperators.end() && "Uhandled predicate");
   NodesWithIncoming_.insert(BO);
-  switch (BO->getOpcode()) {
-    case Instruction::Add:
-      setNode(BO, getBinOp(getNodeName(BO), "add"));
-      return;
-    case Instruction::Sub:
-      setNode(BO, getBinOp(getNodeName(BO), "sub"));
-      return;
-    case Instruction::Mul:
-      setNode(BO, getBinOp(getNodeName(BO), "mul"));
-      return;
-    case Instruction::SDiv:
-    case Instruction::UDiv:
-      setNode(BO, getBinOp(getNodeName(BO), "div"));
-      return;
-    default:
-      break;
-  }
-  assert(false && "Unhandled binary operator");
+  setNode(BO, getBinOp(getNodeName(BO), It->second));
 }
 
 void SRAGraph::addPhiNode(PHINode *Phi) {
@@ -209,28 +197,10 @@ void SRAGraph::addPhiNode(PHINode *Phi) {
 }
 
 void SRAGraph::addSigmaNode(PHINode *Sigma, CmpInst::Predicate Pred) {
+  auto It = HandledCmpPredicates.find(Pred);
+  assert(It != HandledCmpPredicates.end() && "Uhandled predicate");
   NodesWithIncoming_.insert(Sigma);
-  switch (Pred) {
-    case ICmpInst::ICMP_SLT:
-    case ICmpInst::ICMP_ULT:
-      setNode(Sigma, getSigma(getNodeName(Sigma), "lt"));
-      return;
-    case ICmpInst::ICMP_SLE:
-    case ICmpInst::ICMP_ULE:
-      setNode(Sigma, getSigma(getNodeName(Sigma), "le"));
-      return;
-    case ICmpInst::ICMP_SGT:
-    case ICmpInst::ICMP_UGT:
-      setNode(Sigma, getSigma(getNodeName(Sigma), "gt"));
-      return;
-    case ICmpInst::ICMP_SGE:
-    case ICmpInst::ICMP_UGE:
-      setNode(Sigma, getSigma(getNodeName(Sigma), "ge"));
-      return;
-    default:
-      break;
-  }
-  assert(false && "Unknown predicate");
+  setNode(Sigma, getSigma(getNodeName(Sigma), It->second));
 }
 
 void SRAGraph::addIncoming(Value *From, Value *To) {

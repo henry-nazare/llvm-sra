@@ -7,9 +7,6 @@
 
 #include "SymbolicRangeAnalysis.h"
 #include "Redefinition.h"
-#include "SRAGraph.h"
-
-#include "SAGE/SAGENameVault.h"
 
 #include "llvm/Support/Debug.h"
 
@@ -32,12 +29,11 @@ void SymbolicRangeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool SymbolicRangeAnalysis::runOnFunction(Function& F) {
   DEBUG(dbgs() << "SRA: runOnFunction: " << F.getName() << "\n");
-
-  SAGENameVault SNV;
-  SRAGraph G(&F, getAnalysis<Redefinition>(), SNV);
-
-  DEBUG(dbgs() << G << "\n");
-
+  G_ = new SRAGraph(&F, getAnalysis<Redefinition>(), SNV_);
   return false;
+}
+
+SAGERange SymbolicRangeAnalysis::getRange(Value *V) {
+  return G_->getRange(V);
 }
 

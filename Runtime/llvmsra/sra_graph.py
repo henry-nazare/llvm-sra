@@ -1,7 +1,7 @@
+from llvmanalysis.graph import Graph, Node, NarrowNode
 from llvmsage.expr import Expr, S as SE
 from llvmsage.range import Range
 from llvmsra.range import SraRange
-from llvmsra.graph import Graph, Node, NarrowNode
 
 from sage.all import oo
 from sympy import S

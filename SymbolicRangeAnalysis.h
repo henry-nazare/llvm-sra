@@ -23,6 +23,8 @@ public:
 
   SAGERange getRange(Value *V);
 
+  virtual void print(raw_ostream &OS, const Module*) const;
+
 private:
   SRAGraph *G_;
   SAGENameVault SNV_;

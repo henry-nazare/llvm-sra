@@ -102,6 +102,11 @@ class SRAGraph(Graph):
     self.add_node(node)
     return node
 
+  def get_inf(self, name):
+    node = ConstNode(name, state=Range(Expr(-oo), Expr(oo)))
+    self.add_node(node)
+    return node
+
   def get_phi(self, name):
     node = PhiNode(name)
     self.add_node(node)

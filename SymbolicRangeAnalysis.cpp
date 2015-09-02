@@ -30,6 +30,8 @@ void SymbolicRangeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
 bool SymbolicRangeAnalysis::runOnFunction(Function& F) {
   DEBUG(dbgs() << "SRA: runOnFunction: " << F.getName() << "\n");
   G_ = new SRAGraph(&F, getAnalysis<Redefinition>(), SNV_);
+  G_->initialize();
+  G_->solve();
   return false;
 }
 
@@ -37,3 +39,6 @@ SAGERange SymbolicRangeAnalysis::getRange(Value *V) {
   return G_->getRange(V);
 }
 
+void SymbolicRangeAnalysis::print(raw_ostream &OS, const Module*) const {
+  OS << *G_ << "\n";
+}

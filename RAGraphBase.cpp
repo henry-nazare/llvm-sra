@@ -145,18 +145,22 @@ void RAGraphBase::addIntInst(Instruction *I) {
 PyObject *RAGraphBase::getNode(Value *V) {
   assert(V->getType()->isIntegerTy() && "Value is not an integer");
   auto It = Node_.find(V);
+  if (It != Node_.end()) {
+    return It->second;
+  }
 
   // TODO: we also want to handle other constants, such as UndefValue.
   if (ConstantInt *CI = dyn_cast<ConstantInt>(V)) {
     PyObject *Node = getConstant(Get(CI->getValue()));
-    It = Node_.insert(std::make_pair(CI, Node)).first;
+    Node_[CI] = Node;
+    return Node;
   } else if (isa<Constant>(V)) {
     PyObject *Node = getConstant(getNodeName(V));
-    It = Node_.insert(std::make_pair(CI, Node)).first;
+    Node_[V] = Node;
+    return Node;
   }
 
-  assert(It != Node_.end() && "Requested value not in node map");
-  return It->second;
+  assert(false && "Requested value not in node map");
 }
 
 PyObject *RAGraphBase::getNodeName(Value *V) const {

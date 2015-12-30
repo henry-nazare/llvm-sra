@@ -39,7 +39,7 @@ static bool IsRedefinable(Value *V) {
 
 static PHINode *CreateNamedPhi(Value *V, Twine Prefix,
                                BasicBlock::iterator Position) {
-  Twine Name(V->hasName() ? Prefix + "." + V->getName() : Prefix);
+  const auto Name = (V->hasName() ? Prefix + "." + V->getName() : Prefix).str();
   return PHINode::Create(V->getType(), 1, Name, Position);
 }
 

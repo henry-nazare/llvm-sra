@@ -259,10 +259,8 @@ std::string SymbolicRangeAnalysis::makeName(Function *F, Value *V) {
     auto Name = (F->getName() + Twine("_") + V->getName()).str();
     std::replace(Name.begin(), Name.end(), '.', '_');
     return Name;
-  } else {
-    auto Name = F->getName() + Twine("_") + Twine(Temp++);
-    return Name.str();
-  }
+  } else
+    return (F->getName() + Twine("_") + Twine(Temp++)).str();
 }
 
 void SymbolicRangeAnalysis::setName(Value *V, std::string Name) {

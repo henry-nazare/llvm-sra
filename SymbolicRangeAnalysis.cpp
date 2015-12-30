@@ -460,8 +460,9 @@ void SymbolicRangeAnalysis::reset(Function *F) {
 void SymbolicRangeAnalysis::iterate(Function *F) {
   DEBUG(dbgs() << "SRA: Iterate\n");
   while (!Worklist_.empty()) {
-    auto Next = Worklist_.begin(); Worklist_.erase(Next);
+    auto Next = Worklist_.begin();
     Instruction *I = Next->second;
+    Worklist_.erase(Next);
     if (Fn_.count(I) && !Evaled_.count(I)) {
       Evaled_.insert(I);
       setState(I, Fn_[I]());
